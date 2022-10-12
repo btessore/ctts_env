@@ -1,4 +1,4 @@
-from .constants import Rsun, Msun, Ggrav, Msun_per_year_to_si, day_to_sec
+from .constants import Rsun, Msun, Ggrav, Msun_per_year_to_si, day_to_sec, Rsun_au
 from .utils import surface_integral
 from .temperature import logRadLoss_to_T, T_to_logRadLoss
 import numpy as np
@@ -40,7 +40,7 @@ class Star:
 
 # use vectorised versionn
 class Grid:
-    def __init__(self, r, theta, phi, mcfost_grid=False):
+    def __init__(self, r, theta, phi):
 
         assert type(r) == np.ndarray, " r must be a numpy array!"
         assert type(theta) == np.ndarray, " theta must be a numpy array!"
@@ -53,13 +53,8 @@ class Grid:
 
         self._2d = phi.max() == phi.min()  # only a slice phi = array([0.]*Nr*Nt)
 
-        self.mcfost = False
         if self.structured:
-            if mcfost_grid:
-                self.mcfost = True
-                self.grid = (r[0, 0, :], theta[0, :, 0], phi[:, 0, 0])
-            else:
-                self.grid = (r[:, 0, 0], theta[0, :, 0], phi[0, 0, :])
+            self.grid = (r[:, 0, 0], theta[0, :, 0], phi[0, 0, :])
         else:
             self.grid = np.array([r, theta, phi]).T
 
@@ -215,13 +210,7 @@ class Grid:
         if self.structured:
             # takes values at the stellar surface or at rmin.
             # multiply mass_flux by rmin**2 ?
-            if self.mcfost:
-                rhovr = (
-                    self.rho[:, :, 0] * self.v[0, :, :, 0] * self._lmag[:, :, 0]
-                )  # x lmag in case rho is filled with density
-                # better to use rhovr < 0 as a condition
-            else:
-                rhovr = self.rho[0] * self.v[0, 0] * self._lmag[0]
+            rhovr = self.rho[0] * self.v[0, 0] * self._lmag[0]
             # integrate over the shock area
             # mass_flux in units of rhovr / 4pi
             mass_flux, dOmega = surface_integral(
