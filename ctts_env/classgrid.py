@@ -14,9 +14,9 @@ class Star:
         self.P = P
         self.Beq = Beq
 
-        self._vff = np.sqrt(self.M * Msun * Ggrav * 2.0 / self.R / Rsun)
+        self._vff = np.sqrt(self.M_kg() * Ggrav * 2.0 / self.R_m())
         if self.P:
-            self._veq = 2.0 * np.pi / (self.P * day_to_sec) * Rsun * self.R
+            self._veq = 2.0 * np.pi / (self.P * day_to_sec) * self.R_m()
         else:
             self._veq = 0.0
 
@@ -179,7 +179,7 @@ class Grid:
         )
         self._B[1] = m * (np.cos(ma) * self._st - np.sin(ma) * self._cp * self._ct)
         self._B[2] = m * np.sin(ma) * self._sp
-        B = np.sqrt((self._B ** 2).sum(axis=0))
+        B = self.get_B_module()
 
         # smaller arrays, only where accretion takes place
         sig_z = self._sign_z[lmag]
@@ -204,7 +204,7 @@ class Grid:
         if no_sec:
             self.regions[lmag][self._scol] = 0  # transparent
 
-        V = np.sqrt((self.v ** 2).sum(axis=0))
+        V = self.get_v_module()
         self.rho[lmag] = B[lmag] / V[lmag]
         # normalisation of the density
         if self.structured:
@@ -216,6 +216,7 @@ class Grid:
             mass_flux, dOmega = surface_integral(
                 self.grid[1], self.grid[2], -rhovr, axi_sym=self._2d
             )
+            print(mass_flux)
             if verbose:
                 print("dOmega = ", dOmega)
             rho0 = self._Macc / mass_flux / star.S_m2()
@@ -257,6 +258,12 @@ class Grid:
             self.T[lmag] *= Tmax / Tavg
 
         return
+
+    def get_B_module(self):
+        return np.sqrt((self._B ** 2).sum(axis=0))
+
+    def get_v_module(self):
+        return np.sqrt((self.v ** 2).sum(axis=0))
 
     def add_disc_wind(self):
         return
