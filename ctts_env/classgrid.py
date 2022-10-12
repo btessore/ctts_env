@@ -1,7 +1,7 @@
 
-import constants as cst
-from utils import surface_integral
-import temperature as temp
+from .constants import Rsun, Msun, Ggrav, Msun_per_year_to_si, day_to_sec
+from .utils import surface_integral
+from .temperature import logRadLoss_to_T, T_to_logRadLoss
 import numpy as np
 #use astropy units ? 
 
@@ -13,21 +13,21 @@ class Star:
 		self.P = P
 		self.Beq = Beq
 		
-		self._vff = np.sqrt(self.M*cst.Msun*cst.Ggrav*2./self.R/cst.Rsun)
+		self._vff = np.sqrt(self.M*Msun*Ggrav*2./self.R/Rsun)
 		if self.P:
-			self._veq = 2.0 * np.pi / (self.P * cst.day_to_sec) * cst.Rsun * self.R
+			self._veq = 2.0 * np.pi / (self.P * day_to_sec) * Rsun * self.R
 		else:
 			self._veq = 0.0
 		
 		return
 		
 	def R_m(self):
-		return self.R * cst.Rsun
+		return self.R * Rsun
 	def R_au(self):
-		return self.R * cst.Rsun_au
+		return self.R * Rsun_au
 		
 	def M_kg(self):
-		return self.M * cst.Msun
+		return self.M * Msun
 		
 	def m0(self):
 		return self.Beq * 1.0 #magnetic moment at the equator at the stellar surface
@@ -132,11 +132,11 @@ class Grid():
 		
 		self.Rmax = max(self.Rmax,rmo * (1.0 + np.tan(ma)**2))
 		
-		self._Macc = Mdot * cst.Msun_per_year_to_si
+		self._Macc = Mdot * Msun_per_year_to_si
 
 
 		#Constant for density
-		m0 = (self._Macc * star.R_m()) / ((1.0/rmi - 1.0/rmo) * 4.*np.pi) / np.sqrt(2.*cst.Ggrav*star.M_kg())	
+		m0 = (self._Macc * star.R_m()) / ((1.0/rmi - 1.0/rmo) * 4.*np.pi) / np.sqrt(2.*Ggrav*star.M_kg())	
 		
 		#coordinates tilted about z, in F'
 		self._xp = self.r * ( self._cp * self._st * np.cos(ma) - self._ct * np.sin(ma) )
@@ -229,8 +229,8 @@ class Grid():
 		#Computes the temperature of the form Lambda_cool = Qheat / nH^2
 		Q = B[lmag] #self.r[lmag]**-3
 		rl = Q * self.rho[lmag]**-2
-		lgLambda = np.log10(rl/rl.max()) + temp.T_to_logRadLoss(Tmax)
-		self.T[lmag] = temp.logRadLoss_to_T(lgLambda)
+		lgLambda = np.log10(rl/rl.max()) + T_to_logRadLoss(Tmax)
+		self.T[lmag] = logRadLoss_to_T(lgLambda)
 		
 		#In case we keep secondary columns (no_sec = False)
 		#The temperature is normalised so that in average Tavg = Tmax.
