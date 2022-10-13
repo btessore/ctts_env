@@ -7,7 +7,7 @@ from .constants import (
     Rsun_au,
     tiny_val,
 )
-from .utils import surface_integral, spherical_to_cartesian
+from .utils import surface_integral, spherical_to_cartesian, compute_cells_volume
 from .temperature import logRadLoss_to_T, T_to_logRadLoss
 import numpy as np
 
@@ -57,6 +57,7 @@ class Grid:
         assert type(phi) == np.ndarray, " phi must be a numpy array!"
 
         self.shape = r.shape
+        self.Ncells = np.product(self.shape)
         # only important for interpolation
         # Interpolation is much faster on a structured, regular grid
         self.structured = r.ndim > 1
@@ -112,6 +113,21 @@ class Grid:
         # regions==-1: dark
         # regions==1: accretion columns
 
+        self._volume_set = False
+
+        return
+
+    def calc_volume(self, vol=[]):
+        if np.any(vol):
+            self.volume = vol
+        else:
+            dr = np.gradient(self.r, axis=0)
+            dt = np.gradient(self.theta, axis=1)
+            dp = np.gradient(self.phi, axis=2)
+            self.volume = self.r ** 2 * dr * self._st * dt * dp
+
+        self._smoothing_length = 1 / 3 * self.volume ** (1 / 3)
+        self._volume_set = True
         return
 
     def add_magnetopshere(
@@ -315,7 +331,7 @@ class Grid:
     def get_v_cyl(self):
         vx, vy, vz = self.get_v_cart()
         vR = vx * self._cp + vy * self._sp
-        return vR, vz, self._v[2]
+        return vR, vz, self.v[2]
 
     def clean_grid(self, regions_to_clean=[]):
         """
@@ -327,7 +343,7 @@ class Grid:
         instance, (_Rt, _dr, _rho_axi etc...) are not cleaned. They are
         overwritten at each call of the proper method.
         """
-        if not regions_to_clean:
+        if not np.any(regions_to_clean):
             mask = np.ones(self.r.shape, dtype=bool)
         else:
             mask = self.regions == regions_to_clean[0]
@@ -338,6 +354,51 @@ class Grid:
         self.rho[mask] *= 0
         self.T[mask] *= 0
         self.Rmax = 0
+        return
+
+    def _write(self, filename, Voronoi=False, Tring=0, laccretion=True):
+        """
+        This method writes the Grid() instance to an ascii file, to be used
+        by the RT code MCFOST.
+
+        if Voronoi, the data coordinates and vectors are in cartesian
+        otherwise spherical, in AU.
+
+        """
+        if Voronoi and not self._volume_set:
+            print("You need to compute the volume with Voronoi==True!")
+            return
+
+        if Voronoi:
+            vfield_coord = 1
+        else:
+            vfield_coord = 2
+        header = (
+            "%d\n" % (vfield_coord)
+            + "{:4.4f}".format(Tring)
+            + " {:b}\n".format(laccretion)
+        )
+
+        data = np.zeros((11, self.Ncells))
+        data[0], data[1], data[2] = (
+            self.R.flatten(),
+            self.z.flatten(),
+            self.phi.flatten(),
+        )  # units does not matter here, only if Voronoi
+        data[3], data[4], data[5] = (
+            self.T.flatten(),
+            self.rho.flatten(),
+            self.rho.flatten() * 0,
+        )
+        vR, vz, vphi = self.get_v_cyl()
+        data[6], data[7], data[8] = vR.flatten(), vz.flatten(), vphi.flatten()
+        dz = np.copy(self.regions)
+        dz[dz > 0] = 1
+        data[9], data[10] = np.zeros(self.Ncells), dz.flatten()
+
+        fmt = ["%.8e"] * 10 + ["%d"]
+        np.savetxt(filename, data.T, header=header, comments="", fmt=fmt)
+
         return
 
     def plot_regions(self, ax, q, clb_lab="", log_norm=True, cmap="magma"):

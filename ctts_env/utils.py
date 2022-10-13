@@ -50,6 +50,42 @@ def surface_integral(t, p, q, axi_sym=False):
     return S, dOmega
 
 
+def compute_cells_volume(r, t, p):
+    # r is Nr size
+    # t is Nt size
+    # p is Np size
+    # -> minimum size is 2 for gradient
+
+    dt = np.gradient(t)
+    dr = np.gradient(r)
+    dp = np.gradient(p)
+    vol = np.zeros(len(r) * len(t) * len(p))
+    id = -1
+    for i in range(len(r)):
+        for j in range(len(t)):
+            for k in range(len(p)):
+                id += 1
+                vol[id] = r[i] * r[i] * dr[i] * np.sin(t[j]) * dt[j] * dp[k]
+
+    return vol
+
+
+def compute_cells_surface(t, p, R=1):
+    # t is Nt size
+    # p is Np size
+
+    dt = np.gradient(t)
+    dp = np.gradient(p)
+    surf = np.zeros(len(t) * len(p))
+    id = -1
+    for j in range(len(t)):
+        for k in range(len(p)):
+            id += 1
+            surf[id] = R ** 2 * np.sin(t[j]) * dt[j] * dp[k]
+
+    return surf
+
+
 def spherical_to_cartesian(r, t, p, ct, st, cp, sp):
 
     x = r * st * cp + t * ct * cp - sp * p
