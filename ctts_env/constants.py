@@ -17,3 +17,5 @@ Lsun = 3.828e26  # W
 yr_to_sec = 3.154e7  # sec / yr
 Msun_per_year_to_si = Msun / yr_to_sec  # Msun / 31557600
 day_to_sec = 86400.0  # number of seconds in a day
+
+tiny_val = 1e-50

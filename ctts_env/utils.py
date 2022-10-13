@@ -23,7 +23,9 @@ def surface_integral(t, p, q, axi_sym=False):
     #
 
     if axi_sym:
+        # 2.5d
         fact = 2 * np.pi
+        # 2d ? Can be done better
         if t.min() >= 0 and t.max() <= np.pi / 2:
             fact *= 2
         i = 0
@@ -64,3 +66,24 @@ def cartesian_to_spherical(x, y, z, ct, st, cp, sp):
     p = -x * sp + y * cp
 
     return r, t, p
+
+
+def Gamma(Rt, dr):
+    """
+    Axisymmetric area of the shock.
+    Rt :: Inner truncation radius
+    dr :: width of the accretion on the disc
+    """
+    return np.sqrt(1.0 - 1 / (Rt + dr)) - np.sqrt(1.0 - 1 / Rt)
+
+
+def shock_area(Rt, dr, beta=0, f=1):
+    """
+    Area of the shock for arbitrary obliquity of the magnetic dipole.
+    Rt      :: Inner truncation radius
+    dr      :: width of the accretion on the disc
+    beta    :: magnetic obliquity [deg]
+    f       :: shape factor. In secondary columns are completly removed,
+                f = 0.5. (f in ~[0.5, 1])
+    """
+    return f * Gamma(Rt, dr) * np.cos(np.deg2rad(beta))
