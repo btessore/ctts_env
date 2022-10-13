@@ -46,3 +46,21 @@ def surface_integral(t, p, q, axi_sym=False):
         int_phi = int_theta
 
     return S, dOmega
+
+
+def spherical_to_cartesian(r, t, p, ct, st, cp, sp):
+
+    x = r * st * cp + t * ct * cp - sp * p
+    y = r * st * sp + t * ct * sp + cp * p
+    z = r * ct - t * st
+
+    return x, y, z
+
+
+def cartesian_to_spherical(x, y, z, ct, st, cp, sp):
+
+    r = x * st * cp + y * st * sp + z * ct
+    t = x * ct * cp + y * ct * sp - z * st
+    p = -x * sp + y * cp
+
+    return r, t, p
