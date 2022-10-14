@@ -7,9 +7,10 @@ from .constants import (
     Rsun_au,
     tiny_val,
 )
-from .utils import surface_integral, spherical_to_cartesian, compute_cells_volume
+from .utils import surface_integral, spherical_to_cartesian
 from .temperature import logRadLoss_to_T, T_to_logRadLoss
 import numpy as np
+import sys
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
@@ -31,6 +32,21 @@ class Star:
         else:
             self._veq = 0.0
 
+        return
+
+    def _pinfo(self, fout=sys.stdout):
+        print("** Stellar parameters:", file=fout)
+        print(" ----------------------- ", file=fout)
+        print("  R = %lf Rsun; M = %lf Msun" % (self.R, self.M), file=fout)
+        if self.P:
+            print("  P = %lf d" % self.P, file=fout)
+        print("  Beq = %lf G" % self.Beq, file=fout)
+        print("  T = %lf K" % self.T, file=fout)
+        print(
+            "  veq = %lf km/s; vff = %lf km/s" % (self._veq * 1e-3, self._vff * 1e-3),
+            file=fout,
+        )
+        print("", file=fout)
         return
 
     def R_m(self):
@@ -109,6 +125,7 @@ class Grid:
 
         self.regions = np.zeros(self.shape, dtype=int)
         self.regions_label = ["", "Accr. Col", "Disc Wind", "Disc", "dark"]
+        self.regions_id = [0, 1, 2, 3, -1]
         # regions==0: transparent
         # regions==-1: dark
         # regions==1: accretion columns
@@ -117,9 +134,20 @@ class Grid:
 
         return
 
-    def calc_volume(self, vol=[]):
+    def calc_cells_volume(self, vol=[]):
+        """
+        3d grid's cells volume calculation
+        dvolume = dS * dr
+        dvolume = np.gradient(self.r,axis=0) * self.calc_cells_surface()
+        """
+        # if volume is set, simply return.
+        if self._volume_set:
+            return
+
+        # Volume from an external grid ?
         if np.any(vol):
             self.volume = vol
+        # Estimate the volume from this grid
         else:
             dr = np.gradient(self.r, axis=0)
             dt = np.gradient(self.theta, axis=1)
@@ -128,6 +156,15 @@ class Grid:
 
         self._smoothing_length = 1 / 3 * self.volume ** (1 / 3)
         self._volume_set = True
+        return
+
+    def calc_cells_surface(self, R=1):
+        """
+        3d grid's cell surface calculation
+        """
+        dt = np.gradient(self.theta, axis=1)
+        dp = np.gradient(self.phi, axis=2)
+        self.surface = self.r ** 2 * self._st * dt * dp
         return
 
     def add_magnetopshere(
@@ -159,6 +196,8 @@ class Grid:
         self._Rt = rmi
         self._dr = rmo - rmi
         self._beta = beta
+        self._Macc = Mdot * Msun_per_year_to_si
+        self._no_sec = no_sec
 
         if self._beta != 0 and self._2d:
             print(
@@ -167,10 +206,7 @@ class Grid:
             return
 
         ma = np.deg2rad(self._beta)
-
         self.Rmax = max(self.Rmax, rmo * (1.0 + np.tan(ma) ** 2))
-
-        self._Macc = Mdot * Msun_per_year_to_si
 
         # Constant for density in axisymmetric cases
         m0 = (
@@ -350,6 +386,7 @@ class Grid:
             for ir in range(1, len(regions_to_clean)):
                 mask *= self.regions == ir
 
+        self.regions[mask] = 0
         self.v[:, mask] *= 0
         self.rho[mask] *= 0
         self.T[mask] *= 0
@@ -358,6 +395,8 @@ class Grid:
 
     def _write(self, filename, Voronoi=False, Tring=0, laccretion=True):
         """
+        **Building**
+
         This method writes the Grid() instance to an ascii file, to be used
         by the RT code MCFOST.
 
@@ -438,6 +477,7 @@ class Grid:
 
     def _plot_3d(self, Ng=10, show=False, _mayavi=False, cmap="gist_stern"):
         """
+        *** Building ***
         to do: colors, add different regions
         """
         if _mayavi:
@@ -583,4 +623,109 @@ class Grid:
         if show:
             plt.show()
 
+        return
+
+    def _pinfo(self, fout=sys.stdout):
+        """
+        Print info about the grid and the different regions to fout.
+        By defualt fout is the standard output. a file instance
+        can be passed  (f = open('file','w')) to write these info. to
+        the the disc.
+        """
+        print("** Grid's regions:", file=fout)
+        print(" ----------------------- ", file=fout)
+        print("Rmax = %lf Rstar" % self.Rmax, file=fout)
+        for ir in self.regions_id:
+            # Dont' print transparent and dark regions
+            if ir == 0 or ir == -1:
+                continue
+            cond = self.regions == ir
+            if np.any(cond):
+                r = self.r[cond]
+                rho = self.rho[cond]
+                T = self.T[cond]
+                Tavg = np.average(T, weights=rho)
+                vr, vtheta, vphi = self.v[:, cond]
+                vx, vy, vz = self.get_v_cart()
+                vx = vx[cond]
+                vy = vy[cond]
+                vz = vz[cond]
+                vR = self._cp[cond] * vx + self._sp[cond] * vy
+                print(" <//> %s" % self.regions_label[ir], file=fout)
+                # Info. specific to a regions, existing only if the proper method has been called.
+                if ir == 1:
+                    print(
+                        "rmi = %lf Rstar; rmo = %lf Rstar"
+                        % (self._Rt, self._Rt + self._dr),
+                        file=fout,
+                    )
+                    print(
+                        "no sec. columns ? %s" % ("No", "Yes")[self._no_sec], file=fout
+                    )
+                    print("beta_ma = %lf deg" % self._beta, file=fout)
+                    print(
+                        "Macc = %.3e Msun/yr" % (self._Macc / Msun_per_year_to_si),
+                        file=fout,
+                    )
+                    print("", file=fout)
+
+                print("  --  Extent -- ", file=fout)
+                print(
+                    "   min(r) = %.4f R*; max(r) = %.4f R*"
+                    % (r[rho > 0].min(), r.max()),
+                    file=fout,
+                )
+
+                print("  -- Density -- ", file=fout)
+                print(
+                    "   min(rho) = %.4e kg/m3; <rho> = %.4e kg/m3; max(rho) = %.4e kg/m3"
+                    % (rho[rho > 0].min(), np.mean(rho), rho.max()),
+                    file=fout,
+                )
+
+                print("  -- Temperature -- ", file=fout)
+                print(
+                    "   min(T) = %.4e K; <T>_rho = %.4e K; max(T) = %.4e K"
+                    % (T[rho > 0].min(), Tavg, T.max()),
+                    file=fout,
+                )
+
+                print("  -- Velocities -- ", file=fout)
+                print(
+                    "   |Vx| %lf km/s %lf km/s"
+                    % (1e-3 * abs(vx).max(), 1e-3 * abs(vx).min()),
+                    file=fout,
+                )
+                print(
+                    "   |Vy| %lf km/s %lf km/s"
+                    % (1e-3 * abs(vy).max(), 1e-3 * abs(vy).min()),
+                    file=fout,
+                )
+                print(
+                    "   |Vz| %lf km/s %lf km/s"
+                    % (1e-3 * abs(vz).max(), 1e-3 * abs(vz).min()),
+                    file=fout,
+                )
+                print(
+                    "   |VR| %lf km/s %lf km/s"
+                    % (1e-3 * abs(vR).max(), 1e-3 * abs(vR).min()),
+                    file=fout,
+                )
+                print(
+                    "   |Vr| %lf km/s %lf km/s"
+                    % (1e-3 * abs(vr).max(), 1e-3 * abs(vr).min()),
+                    file=fout,
+                )
+                print(
+                    "   |Vtheta| %lf km/s %lf km/s"
+                    % (1e-3 * abs(vtheta).max(), 1e-3 * abs(vtheta).min()),
+                    file=fout,
+                )
+                print(
+                    "   |Vphi| %lf km/s %lf km/s"
+                    % (1e-3 * abs(vphi).max(), 1e-3 * abs(vphi).min()),
+                    file=fout,
+                )
+
+                print("", file=fout)
         return
