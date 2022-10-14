@@ -12,10 +12,10 @@ from .temperature import logRadLoss_to_T, T_to_logRadLoss
 import numpy as np
 import sys
 
-import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
-from matplotlib.patches import Circle
-from matplotlib.colors import LogNorm, Normalize, PowerNorm, SymLogNorm, TwoSlopeNorm
+# import matplotlib.pyplot as plt
+# from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+# from matplotlib.patches import Circle
+# from matplotlib.colors import LogNorm, Normalize, PowerNorm, SymLogNorm, TwoSlopeNorm
 
 
 class Star:
@@ -440,40 +440,40 @@ class Grid:
 
         return
 
-    def plot_regions(self, ax, q, clb_lab="", log_norm=True, cmap="magma"):
-        """
-        **Building**
-        plot the quantity q (self.rho, self.T ..) define on an instance of Grid()
-        """
+    # def plot_regions(self, ax, q, clb_lab="", log_norm=True, cmap="magma"):
+    #     """
+    #     **Building**
+    #     plot the quantity q (self.rho, self.T ..) define on an instance of Grid()
+    #     """
 
-        if log_norm:
-            norm = LogNorm(vmin=q[q > 0].min(), vmax=q.max())
-        else:
-            norm = Normalize(vmin=q.min(), vmax=q.max())
+    #     if log_norm:
+    #         norm = LogNorm(vmin=q[q > 0].min(), vmax=q.max())
+    #     else:
+    #         norm = Normalize(vmin=q.min(), vmax=q.max())
 
-        im = ax.pcolormesh(
-            self.x[:, :, 0], self.z[:, :, 0], q[:, :, 0], norm=norm, cmap=cmap
-        )
-        Np = self.shape[-1]
-        im = ax.pcolormesh(
-            self.x[:, :, Np // 2],
-            self.z[:, :, Np // 2],
-            q[:, :, Np // 2],
-            norm=norm,
-            cmap=cmap,
-        )
+    #     im = ax.pcolormesh(
+    #         self.x[:, :, 0], self.z[:, :, 0], q[:, :, 0], norm=norm, cmap=cmap
+    #     )
+    #     Np = self.shape[-1]
+    #     im = ax.pcolormesh(
+    #         self.x[:, :, Np // 2],
+    #         self.z[:, :, Np // 2],
+    #         q[:, :, Np // 2],
+    #         norm=norm,
+    #         cmap=cmap,
+    #     )
 
-        ax.set_xlabel("x [Rstar]")
-        ax.set_ylabel("z [Rstar]")
+    #     ax.set_xlabel("x [Rstar]")
+    #     ax.set_ylabel("z [Rstar]")
 
-        stdisc = Circle((0, 0), 1, fill=False)
-        ax.add_patch(stdisc)
-        ax_divider = make_axes_locatable(ax)
-        cax = ax_divider.append_axes("right", size="7%", pad="2%")
-        clb = plt.colorbar(im, cax=cax)
-        clb.set_label(clb_lab)
+    #     stdisc = Circle((0, 0), 1, fill=False)
+    #     ax.add_patch(stdisc)
+    #     ax_divider = make_axes_locatable(ax)
+    #     cax = ax_divider.append_axes("right", size="7%", pad="2%")
+    #     clb = plt.colorbar(im, cax=cax)
+    #     clb.set_label(clb_lab)
 
-        return
+    #     return
 
     def _plot_3d(self, Ng=10, show=False, _mayavi=False, cmap="gist_stern"):
         """
@@ -494,6 +494,7 @@ class Grid:
             fig3D = mlab.figure(figure=None, bgcolor=None, fgcolor=None, engine=None)
         else:
             from mpl_toolkits.mplot3d import Axes3D
+            import matplotlib.pyplot as plt
 
             fig3D = plt.figure()
             ax3d = Axes3D(fig3D)
