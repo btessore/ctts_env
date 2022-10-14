@@ -167,7 +167,7 @@ class Grid:
         self.surface = self.r ** 2 * self._st * dt * dp
         return
 
-    def add_magnetopshere(
+    def add_magnetosphere(
         self,
         star,
         rmi=2.2,
