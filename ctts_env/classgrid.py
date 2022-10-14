@@ -266,6 +266,7 @@ class Grid:
         # regions in the magnetosphere with fact <= 0 are set transparent.
         self._lmag = lmag
         self.regions[lmag] = 1  # non-transparent regions.
+        self._dead_zone = rMp < rmi
 
         # smaller arrays, only where accretion takes place
         sig_z = self._sign_z[lmag]
