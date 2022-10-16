@@ -233,15 +233,17 @@ class Grid:
         dtheta = self.grid[1][1] - self.grid[1][0]
         y[self.theta % np.pi == 0.0] = np.sin(dtheta) ** 2
         rM = self.r / y
-        rMp = self.r * sintheta0p_sq / yp
+        rMp = self.r / yp  # = rM / sintheta0p_sq
+        rlim = rMp * sintheta0p_sq
 
         # should not be negative in the accretin columns, hence nan. Hopefully it is close to 0.
         # When negative, this trick avoids nan/inf.
-        fact = np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rMp)) ** 0.5
+        # fact = np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rMp)) ** 0.5
+        fact = (1.0 / self.r - 1.0 / rM) ** 0.5
 
         # condition for accreting field lines
         # -> Axisymmetric case #
-        lmag_axi = (rM >= rmi) * (rM <= rmo)
+        lmag_axi = (rlim >= rmi) * (rlim <= rmo)
         self._rho_axi = np.zeros(self.shape)
         self._rho_axi[lmag_axi] = (  # not normalised to Mdot
             m0
@@ -286,7 +288,7 @@ class Grid:
         self._mcol[mcol] = True  # main columns
         self._scol = ~self._mcol  # secondary columns
         if no_sec:
-            self.regions[lmag][self._scol] = 0  # transparent
+            self.regions[lmag][self._scol[lmag]] = 0  # transparent
 
         V = self.get_v_module()
         self.rho[lmag] = B[lmag] / V[lmag]
@@ -333,7 +335,8 @@ class Grid:
             )
 
         # Computes the temperature of the form Lambda_cool = Qheat / nH^2
-        Q = B[lmag]  # self.r[lmag]**-3
+        # Q = B[lmag]
+        Q = self.r[lmag] ** -3
         rl = Q * self.rho[lmag] ** -2
         lgLambda = np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax)
         self.T[lmag] = logRadLoss_to_T(lgLambda)
