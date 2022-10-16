@@ -35,7 +35,8 @@ def surface_integral(t, p, q, axi_sym=False):
             int_theta += 0.5 * (q[j, i] + q[j - 1, i]) * abs(ct[j] - ct[j - 1])
         S = int_theta * fact
         dOmega *= fact
-        S *= 1.0 / (dOmega * fact)
+
+        S *= 1.0 / dOmega
         return S, dOmega
 
     int_phi = 0
