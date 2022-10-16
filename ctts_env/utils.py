@@ -34,7 +34,9 @@ def surface_integral(t, p, q, axi_sym=False):
             dOmega += abs(ct[j] - ct[j - 1]) / 4 / np.pi
             int_theta += 0.5 * (q[j, i] + q[j - 1, i]) * abs(ct[j] - ct[j - 1])
         S = int_theta * fact
-        return S, dOmega * fact
+        dOmega *= fact
+        S *= 1.0 / (dOmega * fact)
+        return S, dOmega
 
     int_phi = 0
     for i in range(len(p)):
@@ -47,6 +49,7 @@ def surface_integral(t, p, q, axi_sym=False):
             S += 0.5 * (int_theta + int_phi) * (p[i] - p[i - 1])
         int_phi = int_theta
 
+    S *= 1.0 / dOmega
     return S, dOmega
 
 
