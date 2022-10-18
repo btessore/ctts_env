@@ -356,10 +356,33 @@ class Grid:
 
         return
 
-    def add_disc_wind(self):
+    def add_disc_wind(
+        self,
+        star,
+        Rin=3.0,
+        Rout=15,
+        Mloss=1e-10,
+        alpha=0.5,
+        gamma=-0.5,
+        ls=10,
+        zs=15,
+        beta=0.5,
+        fesc=2,
+    ):
         """
-        To Do
+        ** builing **
+                Mloss :: mass ejection rate in Msun/yr
+                gamma :: temperature exponant such that T \propto R**gamma
+                alpha :: mass loss rate power law per unit area
+                ls :: disc wind length scale in unit of Rin
+                zs :: location above or below the midplane at R=0 where the field lines diverge (Source location).
+                beta :: exponent of the radial velocity of the wind (acceleration parameter)
+                fesc :: terminal velocity of the disc wind in unit of the escape velocity
         """
+        ldw = (self.R >= Rin * (abs(self.z) + zs) / zs) * (
+            self.R <= Rout * (abs(self.z) + zs) / zs
+        )
+        self.regions[ldw] = 2
         return
 
     def get_B_module(self):
