@@ -15,13 +15,6 @@ def surface_integral(t, p, q, axi_sym=False):
     ct = np.cos(t)
     S = 0
     dOmega = 0
-    # 	for i in range(len(p)):
-    # 		for j in range(1,len(t)):
-    # 			if i:
-    # 				dOmega += abs(ct[j] - ct[j-1]) * (p[i] - p[i-1]) / 4 / np.pi
-    # 				S += 0.5*(q[j,i]+q[j-1,i-1]) * abs(ct[j] - ct[j-1]) * (p[i] - p[i-1]) / 4 / np.pi
-    #
-
     if axi_sym:
         # 2.5d
         fact = 2 * np.pi

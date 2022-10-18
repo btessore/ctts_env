@@ -167,6 +167,16 @@ class Grid:
         self.surface = self.r ** 2 * self._st * dt * dp
         return
 
+    def _check_overlap(self):
+        """
+        Check that a region is not already filled with density
+        in that case, avoid it or set the density to 0 ? Ò
+        """
+        return
+
+    def add_disc(self):
+        return
+
     def add_magnetosphere(
         self,
         star,
@@ -310,6 +320,9 @@ class Grid:
             mass_flux, dOmega = surface_integral(
                 self.grid[1], self.grid[2], -rhovr, axi_sym=self._2d
             )
+            # similar to
+            # mf = (0.5*(-rhovr[0,1:,1:] - rhovr[0,:-1,:-1]) * abs(ct[:,:-1]) * dp[1:,:]).sum()
+            # with ct = np.diff(self._ct[0],axis=0); dp = np.diff(self.phi[0],axis=1)
             if verbose:
                 print("dOmega = %.4f" % (dOmega))
                 print("mass flux (before norm) = %.4e [v_r B/V]" % mass_flux)
