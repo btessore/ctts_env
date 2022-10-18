@@ -383,6 +383,60 @@ class Grid:
             self.R <= Rout * (abs(self.z) + zs) / zs
         )
         self.regions[ldw] = 2
+        # if not "vff" in star.keys():
+        # 	OmegasK = np.sqrt(star["M"]*Msun*GSI*2./star['R']/Rsun)
+        # else:
+        # 	OmegasK = star["vff"]
+
+        # p_ml = 4.0*gamma * alpha #assuming the mass loss / m2 varies with R as mloss = cste * R^p_ml.
+        # #p_ml + 1 should be < 0
+        # if p_ml + 1 >= 0:
+        # 	print("dk_wind error: p_ml must be < 0 !",(p_ml))
+        # 	exit()
+
+        # l_dw = ls * Rin
+        # beta_dw = 0.5
+        # fesc = 2.0
+        # Mloss_si = Mloss * Msun_per_year_to_si
+
+        # #mloss_surf in kg/s/m2 prop to integral over RdR of R^p_ml
+        # if p_ml + 1 == -1:
+        # 	norm_mloss_surf_theo = abs( np.log(Rout) - np.log(Rin) )
+        # else:
+        # 	norm_mloss_surf_theo = (Rout**(p_ml + 2) - Rin**(p_ml + 2))/(p_ml + 2)
+        # norm_mloss_surf_theo = Mloss_si / norm_mloss_surf_theo * (star["R"]*Rsun)**-2 #in kg/s/m2 / R^(p_ml+2)
+        # #norm in kg/s/(Rstar_m * R)^2/R^p_ml
+        # #such that norm * Rm**p_ml in kg/s/m2
+        # norm_mloss = norm_mloss_surf_theo
+
+        # dw = (g['R'] >= Rin * (abs(g['z']) + zs) / zs) * (g['R'] <= Rout * (abs(g['z']) + zs) / zs)
+        # g['dz'][dw] = 2
+
+        # #smaller arrays of size np.count_nonzero(dw)
+        # sign_z = np.sign(g['z'])[dw]
+
+        # #the constant norm_mloss takes Rm in stellar radius
+        # mloss_loc = norm_mloss * g['R'][dw] **p_ml #norm_mloss in kg/s/m2/R**p_ml
+        # #for each Rm found the corresponding wi i.e., Rm for z=0
+        # wi = zs / (abs(g['z'][dw]) + zs) * g['R'][dw]
+        # vKz0 = OmegasK / np.sqrt(2.0) / np.sqrt(wi)
+        # vK = vKz0 * (wi / g['R'][dw]) #output
+
+        # #distance from the source point where the field lines diverge
+        # q = np.sqrt( g['R']**2 + (abs(g["z"]) + zs)**2 )[dw]
+        # cos_delta = (abs(g["z"])[dw] + zs)  / q
+        # l = q - zs / cos_delta
+        # vesc = OmegasK / np.sqrt(g['R'][dw])
+        # cs = 1e4 * (Rin / wi)**0.5 #m/s
+        # vr = cs + (fesc*vesc  - cs) * (1.0 - ls/(l+ls))**beta
+
+        # sintheta_dw = (g['z'][dw] + zs) / q
+        # vR = vr * sintheta #+vtheta * costheta
+        # vz = sign_z * vr * np.sqrt(1.0 - sintheta * sintheta) #-vtheta * sintheta
+
+        # rho0 = mloss_loc / (vr * cos_delta) * (zs / (q * cos_delta))**2
+
+        # rho[dw] = rho0
         return
 
     def get_B_module(self):
