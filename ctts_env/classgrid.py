@@ -2,7 +2,7 @@ from .constants import (
     Rsun,
     Msun,
     Ggrav,
-    Msun_per_year_to_si,
+    Msun_per_year_to_SI,
     day_to_sec,
     Rsun_au,
     tiny_val,
@@ -158,7 +158,7 @@ class Grid:
         self._volume_set = True
         return
 
-    def calc_cells_surface(self, R=1):
+    def calc_cells_surface(self):
         """
         3d grid's cell surface calculation
         """
@@ -196,7 +196,7 @@ class Grid:
         self._Rt = rmi
         self._dr = rmo - rmi
         self._beta = beta
-        self._Macc = Mdot * Msun_per_year_to_si
+        self._Macc = Mdot * Msun_per_year_to_SI
         self._no_sec = no_sec
 
         if self._beta != 0 and self._2d:
@@ -233,17 +233,17 @@ class Grid:
         dtheta = self.grid[1][1] - self.grid[1][0]
         y[self.theta % np.pi == 0.0] = np.sin(dtheta) ** 2
         rM = self.r / y
-        rMp = self.r / yp  # = rM / sintheta0p_sq
+        rMp = self.r / yp
         rlim = rMp * sintheta0p_sq
 
         # should not be negative in the accretin columns, hence nan. Hopefully it is close to 0.
         # When negative, this trick avoids nan/inf.
-        # fact = np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rMp)) ** 0.5
-        fact = (1.0 / self.r - 1.0 / rM) ** 0.5
+        fact = np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rMp)) ** 0.5
+        # fact = (1.0 / self.r - 1.0 / rMp) ** 0.5
 
         # condition for accreting field lines
         # -> Axisymmetric case #
-        lmag_axi = (rlim >= rmi) * (rlim <= rmo)
+        lmag_axi = (rM >= rmi) * (rM <= rmo) * (fact > 0)
         self._rho_axi = np.zeros(self.shape)
         self._rho_axi[lmag_axi] = (  # not normalised to Mdot
             m0
@@ -253,24 +253,40 @@ class Grid:
         )
         #######################
 
-        m = star.m0() / self.r ** 3  # magnetic moment at r
-
-        self._B = np.zeros(self.v.shape)
-        self._B[0] = (
-            2.0 * m * (np.cos(ma) * self._ct + np.sin(ma) * self._cp * self._st)
-        )
-        self._B[1] = m * (np.cos(ma) * self._st - np.sin(ma) * self._cp * self._ct)
-        self._B[2] = m * np.sin(ma) * self._sp
-        B = self.get_B_module()
-
         # condition for accreting field lines
-        lmag = (rMp >= rmi) * (rMp <= rmo) * (fact > 0)
+        lmag = (rlim >= rmi) * (rlim <= rmo)
         # regions in the magnetosphere with fact <= 0 are set transparent.
         self._lmag = lmag
+
+        # Secondary and main columns
+        mcol = (cpp * self.z >= 0.0) * lmag
+        self._mcol = np.zeros(self.shape, dtype=bool)
+        self._scol = np.zeros(self._mcol.shape, dtype=bool)
+        self._mcol[mcol] = True  # main columns
+        self._scol = ~self._mcol  # secondary columns
+        if no_sec:
+            self._lmag *= self._mcol
+            lmag *= self._mcol
+
         self.regions[lmag] = 1  # non-transparent regions.
-        self._dead_zone = rMp < rmi
 
         # smaller arrays, only where accretion takes place
+        m = star.m0() / self.r[lmag] ** 3  # magnetic moment at r
+        self._B = np.zeros(self.v.shape)
+        self._B[0, lmag] = (
+            2.0
+            * m
+            * (
+                np.cos(ma) * self._ct[lmag]
+                + np.sin(ma) * self._cp[lmag] * self._st[lmag]
+            )
+        )
+        self._B[1, lmag] = m * (
+            np.cos(ma) * self._st[lmag] - np.sin(ma) * self._cp[lmag] * self._ct[lmag]
+        )
+        self._B[2, lmag] = m * np.sin(ma) * self._sp[lmag]
+        B = self.get_B_module()
+
         sig_z = self._sign_z[lmag]
 
         vpol = star._vff * fact[lmag]
@@ -282,30 +298,22 @@ class Grid:
         self.v[1, lmag] = vt
         self.v[2, lmag] = vtor
 
-        mcol = (cpp * self.z >= 0.0) * lmag
-        self._mcol = np.zeros(self.shape, dtype=bool)
-        self._scol = np.zeros(self._mcol.shape, dtype=bool)
-        self._mcol[mcol] = True  # main columns
-        self._scol = ~self._mcol  # secondary columns
-        if no_sec:
-            self.regions[lmag][self._scol[lmag]] = 0  # transparent
-
         V = self.get_v_module()
         self.rho[lmag] = B[lmag] / V[lmag]
         # normalisation of the density
         if self.structured:
             # takes values at the stellar surface or at rmin.
             # multiply mass_flux by rmin**2 ?
-            rhovr = self.rho[0] * self.v[0, 0]
+            rhovr = self.rho[0] * self.v[0, 0] * (self.regions[0] == 1)
             # integrate over the shock area
-            # mass_flux in units of rhovr / 4pi
+            # mass_flux in units of rhovr
             mass_flux, dOmega = surface_integral(
                 self.grid[1], self.grid[2], -rhovr, axi_sym=self._2d
             )
             if verbose:
                 print("dOmega = %.4f" % (dOmega))
                 print("mass flux (before norm) = %.4e [v_r B/V]" % mass_flux)
-            rho0 = self._Macc / mass_flux / star.S_m2()
+            rho0 = self._Macc / mass_flux / star.R_m() ** 2
         else:
             print("Error unstructured grid not yet")
 
@@ -318,14 +326,12 @@ class Grid:
             surface_integral(
                 self.grid[1], self.grid[2], -rhovr * rho0, axi_sym=self._2d
             )[0]
-            * 4
-            * np.pi
             * star.R_m() ** 2
         )
         if verbose:
             print(
                 "Mass flux (after norm) = %.4e Msun.yr^-1"
-                % (mass_flux_check / Msun_per_year_to_si)
+                % (mass_flux_check / Msun_per_year_to_SI)
             )
             print("(check) Mdot/Mdot_input = %.3f" % (mass_flux_check / self._Macc))
         if abs(mass_flux_check / self._Macc - 1.0) > 1e-5:
@@ -479,14 +485,26 @@ class Grid:
 
     #     return
 
-    def _plot_3d(self, Ng=10, show=False, _mayavi=False, cmap="gist_stern"):
+    def _plot_3d(
+        self,
+        Ng=50,
+        show=False,
+        _mayavi=False,
+        cmap="gist_stern",
+        show_disc=True,
+        show_star=True,
+        show_axes=True,
+        view=(0, 0),
+    ):
         """
         *** Building ***
         to do: colors, add different regions
+        view = (incl,az) incl = 0, z axis pointing toward the obs. incl = 90, z is up
         """
         if _mayavi:
             try:
                 from mayavi import mlab
+                from scipy.interpolate import RegularGridInterpolator
 
             except:
 
@@ -503,6 +521,7 @@ class Grid:
             fig3D = plt.figure()
             ax3d = Axes3D(fig3D)
 
+        Rmax = self._Rt + self._dr
         mask = self.rho > 0
         mask_surf = mask.reshape(-1, self.shape[-1])
 
@@ -512,7 +531,7 @@ class Grid:
         color_axes = (0, 0, 0)
 
         if self._beta != 0.0:
-            bhat = (-np.sin(np.deg2rad(self._beta)), 0, np.cos(np.deg2rad(self._beta)))
+            bhat = (np.sin(np.deg2rad(self._beta)), 0, np.cos(np.deg2rad(self._beta)))
 
         # draw the star (all units in Rstar)
         rt, rp = np.mgrid[0 : np.pi : 1j * Ng, 0 : 2 * np.pi : 1j * Ng]
@@ -521,9 +540,10 @@ class Grid:
         rz = 1 * np.cos(rt)
 
         # draw a disc in the plane theta = pi/2 (z=0)
-        dx = np.linspace(self._Rt, 10 * self._Rt, Ng) * np.cos(rp)
-        dy = np.linspace(self._Rt, 10 * self._Rt, Ng) * np.sin(rp)
-        dz = 0.0 + np.zeros(rp.shape)
+        Rd, zd = np.mgrid[self._Rt : self._Rt * 10 : 1j * Ng, 0 : 0 : 1j * Ng]
+        dx = Rd * np.cos(rp)
+        dy = Rd * np.sin(rp)
+        dz = zd
         if _mayavi:
             color_star = (255 / 255, 140 / 255, 0)
             color_disc = (169 / 255, 169 / 255, 169 / 255)
@@ -534,96 +554,133 @@ class Grid:
             color_bhat = "DarkBlue"
 
         if _mayavi:
-            mlab.mesh(rx, ry, rz, color=color_star, representation="surface")
-            mlab.mesh(dx, dy, dz, color=color_disc, representation="surface")
+            if show_star:
+                mlab.mesh(rx, ry, rz, color=color_star, representation="surface")
+            if show_disc:
+                mlab.mesh(dx, dy, dz, color=color_disc, representation="surface")
 
-            rotation_axis = mlab.quiver3d(
-                zhat[0],
-                zhat[1],
-                zhat[2],
-                zhat[0],
-                zhat[1],
-                2 * zhat[2],
-                color=color_axes,
-            )
-            x_axis = mlab.quiver3d(
-                xhat[0],
-                xhat[1],
-                xhat[2],
-                2 * xhat[0],
-                xhat[1],
-                xhat[2],
-                color=color_axes,
-            )
-            y_axis = mlab.quiver3d(
-                yhat[0],
-                yhat[1],
-                yhat[2],
-                yhat[0],
-                2 * yhat[1],
-                yhat[2],
-                color=color_axes,
-            )
-            if self._beta != 0:
-                mlab.quiver3d(bhat, 2 * bhat, color=color_bhat)
+            if show_axes:
+                rotation_axis = mlab.quiver3d(
+                    zhat[0],
+                    zhat[1],
+                    zhat[2],
+                    zhat[0],
+                    zhat[1],
+                    2 * zhat[2],
+                    color=color_axes,
+                )
+                x_axis = mlab.quiver3d(
+                    xhat[0],
+                    xhat[1],
+                    xhat[2],
+                    2 * xhat[0],
+                    xhat[1],
+                    xhat[2],
+                    color=color_axes,
+                )
+                y_axis = mlab.quiver3d(
+                    yhat[0],
+                    yhat[1],
+                    yhat[2],
+                    yhat[0],
+                    2 * yhat[1],
+                    yhat[2],
+                    color=color_axes,
+                )
+                if self._beta != 0:
+                    mlab.quiver3d(
+                        bhat[0],
+                        bhat[1],
+                        bhat[2],
+                        2 * bhat[0],
+                        2 * bhat[2],
+                        2 * bhat[2],
+                        color=color_bhat,
+                    )
 
-            mlab.orientation_axes()
+                mlab.orientation_axes()
+
+                Xm, Ym, Zm = np.mgrid[
+                    -Rmax : Rmax : Ng * 1j,
+                    -Rmax : Rmax : Ng * 1j,
+                    -Rmax : Rmax : Ng * 1j,
+                ]
+                finterp = RegularGridInterpolator(self.grid, self.rho, method="linear")
+                vol_density = mlab.pipeline.scalar_field(
+                    Xm, Ym, Zm, finterp((Xm, Ym, Zm))
+                )  # ,vmin=,vmax=)
+                #     vol_density = ChangeVolColormap(vol_density,cmapName="Reds",vmin=vmin,vmax=vmax,alpha=1.0)
+                mlab.pipeline.volume(vol_density)
 
         else:
-            ax3d.plot_surface(rx, ry, rz, antialiased=True, color=color_star)
-            ax3d.plot_surface(dx, dy, dz, color=color_disc)
-            ax3d.plot_trisurf(
-                self.x[mask].flatten(),
-                self.y[mask].flatten(),
-                self.z[mask].flatten(),
-                color="blue",
-            )
-
-            ax3d.quiver3D(
-                zhat[0],
-                zhat[1],
-                zhat[2],
-                zhat[0],
-                zhat[1],
-                2 * zhat[2],
-                color=color_axes,
-            )
-            ax3d.quiver3D(
-                xhat[0],
-                xhat[1],
-                xhat[2],
-                2 * xhat[0],
-                xhat[1],
-                xhat[2],
-                color=color_axes,
-            )
-            ax3d.quiver3D(
-                yhat[0],
-                yhat[1],
-                yhat[2],
-                yhat[0],
-                2 * yhat[1],
-                yhat[2],
-                color=color_axes,
-            )
-
-            if self._beta != 0:
-                ax3d.quiver3D(
-                    bhat[0],
-                    bhat[1],
-                    bhat[2],
-                    2 * bhat[0],
-                    2 * bhat[1],
-                    2 * bhat[2],
-                    color=color_bhat,
+            if show_star:
+                ax3d.plot_surface(rx, ry, rz, antialiased=True, color=color_star)
+            if show_disc:
+                ax3d.plot_surface(
+                    dx, dy, dz, color=color_disc, antialiased=False, alpha=0.5
                 )
+            # ax3d.plot_surface(
+            #     self.x.reshape(-1, self.shape[-1]) * mask_surf,
+            #     self.y.reshape(-1, self.shape[-1]) * mask_surf,
+            #     self.z.reshape(-1, self.shape[-1]) * mask_surf,
+            #     color="lightgray",
+            #     alpha=1,
+            # )
+            ax3d.scatter(
+                self.x[mask],
+                self.y[mask],
+                self.z[mask],
+                c=self.get_B_module()[mask],
+                cmap=cmap,
+            )
+
+            if show_axes:
+                ax3d.quiver3D(
+                    zhat[0],
+                    zhat[1],
+                    zhat[2],
+                    zhat[0],
+                    zhat[1],
+                    2 * zhat[2],
+                    color=color_axes,
+                )
+                ax3d.quiver3D(
+                    xhat[0],
+                    xhat[1],
+                    xhat[2],
+                    2 * xhat[0],
+                    xhat[1],
+                    xhat[2],
+                    color=color_axes,
+                )
+                ax3d.quiver3D(
+                    yhat[0],
+                    yhat[1],
+                    yhat[2],
+                    yhat[0],
+                    2 * yhat[1],
+                    yhat[2],
+                    color=color_axes,
+                )
+
+                if self._beta != 0:
+                    ax3d.quiver3D(
+                        bhat[0],
+                        bhat[1],
+                        bhat[2],
+                        2 * bhat[0],
+                        2 * bhat[1],
+                        2 * bhat[2],
+                        color=color_bhat,
+                    )
+                ax3d.view_init(90 - view[0], 90 - view[1])
 
             ax3d.set_xlabel("X")
             ax3d.set_ylabel("Y")
             ax3d.set_zlabel("Z")
-            ax3d.set_xlim(-1.5 * self.Rmax, 1.5 * self.Rmax)
-            ax3d.set_ylim(-1.5 * self.Rmax, 1.5 * self.Rmax)
-            ax3d.set_zlim(-1.5 * self.Rmax, 1.5 * self.Rmax)
+            ax3d.set_xlim(-Rmax, Rmax)
+            ax3d.set_ylim(-Rmax, Rmax)
+            ax3d.set_zlim(-Rmax, Rmax)
 
         if show:
             plt.show()
@@ -669,7 +726,7 @@ class Grid:
                     )
                     print("beta_ma = %lf deg" % self._beta, file=fout)
                     print(
-                        "Macc = %.3e Msun/yr" % (self._Macc / Msun_per_year_to_si),
+                        "Macc = %.3e Msun/yr" % (self._Macc / Msun_per_year_to_SI),
                         file=fout,
                     )
                     print("", file=fout)
@@ -733,4 +790,16 @@ class Grid:
                 )
 
                 print("", file=fout)
+        return
+
+    def _check_naninf(self, _attrs=["rho", "T", "v"]):
+        # list_attr = [
+        #     [getattr(self, attr), attr]
+        #     for attr in dir(self)
+        #     if (not attr.startswith("_") and type(getattr(self, attr)) != np.ndarray)
+        # ]
+        list_attr = [[getattr(self, attr), attr] for attr in _attrs]
+        for l in list_attr:
+            if np.any(np.isnan(l[0])) or np.any(np.isinf(l[0])):
+                print("WARNING : self.%s has some nan/inf values!" % l[1])
         return
