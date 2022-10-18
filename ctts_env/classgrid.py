@@ -229,7 +229,7 @@ class Grid:
         self._xp = self.r * (self._cp * self._st * np.cos(ma) - self._ct * np.sin(ma))
         self._yp = self.r * (self._sp * self._st)
         self._zp = self.r * (self._cp * self._st * np.sin(ma) + self._ct * np.cos(ma))
-        Rp = np.sqrt(self._xp ** 2 + self._yp ** 2) + tiny_val
+        Rp = np.sqrt(self._xp ** 2 + self._yp ** 2)  # + tiny_val
 
         cpp = self._xp / Rp
         spp = self._yp / Rp
@@ -248,7 +248,7 @@ class Grid:
 
         # should not be negative in the accretin columns, hence nan. Hopefully it is close to 0.
         # When negative, this trick avoids nan/inf.
-        fact = np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rMp)) ** 0.5
+        fact = np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rM)) ** 0.5  # rMp
         # fact = (1.0 / self.r - 1.0 / rMp) ** 0.5
 
         # condition for accreting field lines
