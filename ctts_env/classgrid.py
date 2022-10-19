@@ -174,7 +174,22 @@ class Grid:
         """
         return
 
-    def add_disc(self):
+    def add_disc(self, Rin, dwidth=0, no_sec=False, phi0=0):
+        # zmin = dwidth + np.amin(abs(self.z), axis=(1, 2))
+        # mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, None])
+        zmin = dwidth + np.amin(abs(self.z), axis=1)
+        mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, :])
+        # -> wall not yet
+        # if no_sec:
+        #     north = (1.0 + np.cos(self.phi + phi0)) / 2.0
+        #     sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
+        #     mask = (self.R > Rin) * (
+        #         (self.z <= zmin[:, None, :] * north) * (self.z > 0)
+        #         | (self.z >= -zmin[:, None, :] * sud) * (self.z <= 0)
+        #     )
+
+        self.regions[mask] = -1
+        self.rho[mask] = 1e-2  # kg/m3
         return
 
     def add_magnetosphere(
@@ -249,7 +264,7 @@ class Grid:
         # should not be negative in the accretin columns, hence nan. Hopefully it is close to 0.
         # When negative, this trick avoids nan/inf.
         fact = np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rM)) ** 0.5  # rMp
-        # fact = (1.0 / self.r - 1.0 / rMp) ** 0.5
+        # -> cannot be rMp ?
 
         # condition for accreting field lines
         # -> Axisymmetric case #
@@ -261,6 +276,7 @@ class Grid:
             * np.sqrt(4.0 - 3 * y[lmag_axi])
             / np.sqrt(1.0 - y[lmag_axi])
         )
+        # TO DO: norm
         #######################
 
         # condition for accreting field lines
