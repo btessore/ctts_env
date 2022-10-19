@@ -26,9 +26,15 @@ class Star:
         self.P = P
         self.Beq = Beq
 
-        self._vff = np.sqrt(self.M_kg() * Ggrav * 2.0 / self.R_m())
+        self.R_m = self.R * Rsun
+        self.R_au = self.R * Rsun_au
+        self.M_kg = self.M * Msun
+        self._m0 = self.Beq * 1.0
+        self.S_m2 = 4 * np.pi * self.R_m ** 2
+
+        self._vff = np.sqrt(self.M_kg * Ggrav * 2.0 / self.R_m)
         if self.P:
-            self._veq = 2.0 * np.pi / (self.P * day_to_sec) * self.R_m()
+            self._veq = 2.0 * np.pi / (self.P * day_to_sec) * self.R_m
         else:
             self._veq = 0.0
 
@@ -48,21 +54,6 @@ class Star:
         )
         print("", file=fout)
         return
-
-    def R_m(self):
-        return self.R * Rsun
-
-    def R_au(self):
-        return self.R * Rsun_au
-
-    def M_kg(self):
-        return self.M * Msun
-
-    def m0(self):
-        return self.Beq * 1.0  # magnetic moment at the equator at the stellar surface
-
-    def S_m2(self):
-        return 4 * np.pi * self.R_m() ** 2
 
 
 class Grid:
@@ -177,9 +168,10 @@ class Grid:
     def add_disc(self, Rin, dwidth=0, no_sec=False, phi0=0):
         # zmin = dwidth + np.amin(abs(self.z), axis=(1, 2))
         # mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, None])
-        zmin = dwidth + np.amin(abs(self.z), axis=1)
-        mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, :])
-        # -> wall not yet
+        if not self._2d:
+            zmin = dwidth + np.amin(abs(self.z), axis=1)
+            mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, :])
+        # -> wall not yet (only in 3d)
         # if no_sec:
         #     north = (1.0 + np.cos(self.phi + phi0)) / 2.0
         #     sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
@@ -187,6 +179,9 @@ class Grid:
         #         (self.z <= zmin[:, None, :] * north) * (self.z > 0)
         #         | (self.z >= -zmin[:, None, :] * sud) * (self.z <= 0)
         #     )
+        else:
+            zmin = dwidth + np.amin(abs(self.z), axis=1)
+            mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, :])
 
         self.regions[mask] = -1
         self.rho[mask] = 1e-2  # kg/m3
@@ -226,18 +221,17 @@ class Grid:
 
         if self._beta != 0 and self._2d:
             print(
-                "(add_magnetosphere) Error : grid cannot be 3d if magnetic obliquity is not 0.0"
+                "(add_magnetosphere) WARNING : Using a 2d grid for a non-axisymmetric model!"
             )
-            return
 
         ma = np.deg2rad(self._beta)
         self.Rmax = max(self.Rmax, rmo * (1.0 + np.tan(ma) ** 2))
 
         # Constant for density in axisymmetric cases
         m0 = (
-            (self._Macc * star.R_m())
+            (self._Macc * star.R_m)
             / ((1.0 / rmi - 1.0 / rmo) * 4.0 * np.pi)
-            / np.sqrt(2.0 * Ggrav * star.M_kg())
+            / np.sqrt(2.0 * Ggrav * star.M_kg)
         )
 
         # coordinates tilted about z, in F'
@@ -272,7 +266,7 @@ class Grid:
         self._rho_axi = np.zeros(self.shape)
         self._rho_axi[lmag_axi] = (  # not normalised to Mdot
             m0
-            * (star.R_m() * self.r[lmag_axi]) ** (-5.0 / 2.0)
+            * (star.R_m * self.r[lmag_axi]) ** (-5.0 / 2.0)
             * np.sqrt(4.0 - 3 * y[lmag_axi])
             / np.sqrt(1.0 - y[lmag_axi])
         )
@@ -297,7 +291,7 @@ class Grid:
         self.regions[lmag] = 1  # non-transparent regions.
 
         # smaller arrays, only where accretion takes place
-        m = star.m0() / self.r[lmag] ** 3  # magnetic moment at r
+        m = star._m0 / self.r[lmag] ** 3  # magnetic moment at r
         self._B = np.zeros(self.v.shape)
         self._B[0, lmag] = (
             2.0
@@ -342,7 +336,7 @@ class Grid:
             if verbose:
                 print("dOmega = %.4f" % (dOmega))
                 print("mass flux (before norm) = %.4e [v_r B/V]" % mass_flux)
-            rho0 = self._Macc / mass_flux / star.R_m() ** 2
+            rho0 = self._Macc / mass_flux / star.R_m ** 2
         else:
             print("Error unstructured grid not yet")
 
@@ -355,7 +349,7 @@ class Grid:
             surface_integral(
                 self.grid[1], self.grid[2], -rhovr * rho0, axi_sym=self._2d
             )[0]
-            * star.R_m() ** 2
+            * star.R_m ** 2
         )
         if verbose:
             print(
@@ -370,8 +364,8 @@ class Grid:
             )
 
         # Computes the temperature of the form Lambda_cool = Qheat / nH^2
-        # Q = B[lmag]
-        Q = self.r[lmag] ** -3
+        Q = B[lmag]
+        # Q = self.r[lmag] ** -3
         rl = Q * self.rho[lmag] ** -2
         lgLambda = np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax)
         self.T[lmag] = logRadLoss_to_T(lgLambda)
@@ -531,8 +525,9 @@ class Grid:
         header = (
             "%d\n" % (vfield_coord)
             + "{:4.4f}".format(Tring)
-            + " {:b}\n".format(laccretion)
+            + " {:b}".format(laccretion)
         )
+        header += "\nthis line is empty and is here for retro-compatibility with cpinte/master (until merge)"
 
         data = np.zeros((11, self.Ncells))
         data[0], data[1], data[2] = (
