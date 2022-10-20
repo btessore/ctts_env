@@ -178,18 +178,29 @@ class Grid:
             midplane = np.argmin((self.theta[0, :, 0] - np.pi / 2) ** 2)
             dwall = abs(
                 Rwi
-                - self.R[np.argmin((self.R[:, midplane, 0] - Rwi) ** 2), midplane, 0]
+                - self.R[
+                    np.argmin((self.R[:, midplane, 0] - Rwi) ** 2) + 1, midplane, 0
+                ]
             )
             north = (1.0 + np.cos(self.phi + phi0)) / 2.0
             sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
             mask = (
-                (self.R >= Rwi)
+                (self.R > Rwi)
                 * (self.R <= Rwi + dwall)
                 * (
                     (self.z <= zmin[:, None, :] + Aw * north) * (self.z >= 0)
                     | (self.z >= -zmin[:, None, :] - Aw * sud) * (self.z < 0)
                 )
             )
+            # wall following accretion column building
+            # rM = self.r ** 3 / (self._xp ** 2 + self._yp ** 2)
+            # col_mask = (rM > Rwi) * (rM <= Rwi + dwall)
+            # north = col_mask * self.z > 0
+            # south = col_mask * self.z < 0
+            # mask = self.z <= zmin[:, None, :] + Aw * north
+            # mask = (self.z <= zmin[:, None, :] + Aw * north) * (
+            #     self.z >= -zmin[:, None, :] - Aw * south
+            # )
             self.regions[mask] = -1
             self.rho[mask] = 1e-5
         return
