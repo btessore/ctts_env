@@ -166,21 +166,32 @@ class Grid:
         """
         return
 
-    def add_disc(self, Rin, dwidth=0, no_sec=False, phi0=0):
+    def add_disc(self, Rin, dwidth=0, wall=False, phi0=0, Rwi=1, Aw=1):
         # zmin = dwidth + np.amin(abs(self.z), axis=(1, 2))
         # mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, None])
         zmin = dwidth + np.amin(abs(self.z), axis=1)
         mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, :])
-        # -> wall not yet (only in 3d)
-        # if (no_sec) and (not self._2d):
-        #     north = (1.0 + np.cos(self.phi + phi0)) / 2.0
-        #     sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
-        #     mask = (self.R > Rin) * (
-        #         (self.z <= zmin[:, None, :] * north) * (self.z > 0)
-        #         | (self.z >= -zmin[:, None, :] * sud) * (self.z <= 0)
-        #     )
         self.regions[mask] = -1
-        self.rho[mask] = 1e-2  # kg/m3
+        self.rho[mask] = 1e-5  # kg/m3
+        # add wall after disc
+        if (wall) and (not self._2d):
+            midplane = np.argmin((self.theta[0, :, 0] - np.pi / 2) ** 2)
+            dwall = abs(
+                Rwi
+                - self.R[np.argmin((self.R[:, midplane, 0] - Rwi) ** 2), midplane, 0]
+            )
+            north = (1.0 + np.cos(self.phi + phi0)) / 2.0
+            sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
+            mask = (
+                (self.R >= Rwi)
+                * (self.R <= Rwi + dwall)
+                * (
+                    (self.z <= zmin[:, None, :] + Aw * north) * (self.z >= 0)
+                    | (self.z >= -zmin[:, None, :] - Aw * sud) * (self.z < 0)
+                )
+            )
+            self.regions[mask] = -1
+            self.rho[mask] = 1e-5
         return
 
     def add_magnetosphere(
