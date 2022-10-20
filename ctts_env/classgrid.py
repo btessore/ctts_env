@@ -160,29 +160,25 @@ class Grid:
 
     def _check_overlap(self):
         """
+        *** building ***
         Check that a region is not already filled with density
-        in that case, avoid it or set the density to 0 ? Ò
+        in that case, avoid it or set the density to 0 ?
         """
         return
 
     def add_disc(self, Rin, dwidth=0, no_sec=False, phi0=0):
         # zmin = dwidth + np.amin(abs(self.z), axis=(1, 2))
         # mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, None])
-        if not self._2d:
-            zmin = dwidth + np.amin(abs(self.z), axis=1)
-            mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, :])
+        zmin = dwidth + np.amin(abs(self.z), axis=1)
+        mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, :])
         # -> wall not yet (only in 3d)
-        # if no_sec:
+        # if (no_sec) and (not self._2d):
         #     north = (1.0 + np.cos(self.phi + phi0)) / 2.0
         #     sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
         #     mask = (self.R > Rin) * (
         #         (self.z <= zmin[:, None, :] * north) * (self.z > 0)
         #         | (self.z >= -zmin[:, None, :] * sud) * (self.z <= 0)
         #     )
-        else:
-            zmin = dwidth + np.amin(abs(self.z), axis=1)
-            mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, :])
-
         self.regions[mask] = -1
         self.rho[mask] = 1e-2  # kg/m3
         return
@@ -257,12 +253,16 @@ class Grid:
 
         # should not be negative in the accretin columns, hence nan. Hopefully it is close to 0.
         # When negative, this trick avoids nan/inf.
-        fact = np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rM)) ** 0.5  # rMp
+        fact = (
+            np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rM)) ** 0.5
+        )  # rMp, rlim ?
         # -> cannot be rMp ?
+        # the wall can be included form the starting point of the field lines ?
+        self._zd = np.fmax(np.zeros(self.r.shape), self.r ** 2 - rMp ** 2) ** 0.5
 
         # condition for accreting field lines
         # -> Axisymmetric case #
-        lmag_axi = (rM >= rmi) * (rM <= rmo) * (fact > 0)
+        lmag_axi = (rM >= rmi) * (rM <= rmo)
         self._rho_axi = np.zeros(self.shape)
         self._rho_axi[lmag_axi] = (  # not normalised to Mdot
             m0
@@ -274,7 +274,7 @@ class Grid:
         #######################
 
         # condition for accreting field lines
-        lmag = (rlim >= rmi) * (rlim <= rmo)
+        lmag = (rlim >= rmi) * (rlim <= rmo)  # add check to test it is empty ?
         # regions in the magnetosphere with fact <= 0 are set transparent.
         self._lmag = lmag
 
@@ -376,6 +376,8 @@ class Grid:
         if not no_sec and self._beta != 0.0:  # only if the model is not axisymmetric
             Tavg = np.average(self.T[lmag], weights=self.rho[lmag])
             self.T[lmag] *= Tmax / Tavg
+            print("Tmax (after norm to <T>) = %lf K" % self.T[lmag].max())
+            print("  <T> = %lf K" % np.average(self.T[lmag], weights=self.rho[lmag]))
 
         return
 
@@ -527,7 +529,6 @@ class Grid:
             + "{:4.4f}".format(Tring)
             + " {:b}".format(laccretion)
         )
-        header += "\nthis line is empty and is here for retro-compatibility with cpinte/master (until merge)"
 
         data = np.zeros((11, self.Ncells))
         data[0], data[1], data[2] = (
