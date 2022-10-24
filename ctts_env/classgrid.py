@@ -166,7 +166,16 @@ class Grid:
         """
         return
 
-    def add_disc(self, Rin, dwidth=0, wall=False, phi0=0, Rwi=1, Aw=1):
+    def add_disc(self):
+        """
+        Dust and gas disc
+        """
+        return
+
+    def add_dark_disc(self, Rin, dwidth=0, wall=False, phi0=0, Rwi=1, Aw=1):
+        """
+        Optically thick and ultra-cool disc.
+        """
         # zmin = dwidth + np.amin(abs(self.z), axis=(1, 2))
         # mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, None])
         zmin = dwidth + np.amin(abs(self.z), axis=1)
@@ -275,9 +284,10 @@ class Grid:
 
         # should not be negative in the accretin columns, hence nan. Hopefully it is close to 0.
         # When negative, this trick avoids nan/inf.
-        fact = (
-            np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rM)) ** 0.5
-        )  # rMp, rlim ?
+        # fact = (
+        #     np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rM)) ** 0.5
+        # )  # rMp, rlim ?
+        fact = (1.0 / self.r - 1.0 / rM) ** 0.5
         # -> cannot be rMp ?
         # the wall can be included form the starting point of the field lines ?
         self._zd = np.fmax(np.zeros(self.r.shape), self.r ** 2 - rMp ** 2) ** 0.5
