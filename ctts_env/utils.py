@@ -65,6 +65,11 @@ def cartesian_to_spherical(x, y, z, ct, st, cp, sp):
     return r, t, p
 
 
+def centrifugal_barrier(beta):
+    barrier = (2 / (2 + np.cos(np.deg2rad(beta)) ** 2)) ** (1 / 3)
+    return barrier  # in units of Rco !
+
+
 def Gamma(Rt, dr):
     """
     Axisymmetric area of the shock.
