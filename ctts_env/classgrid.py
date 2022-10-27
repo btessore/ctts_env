@@ -5,7 +5,6 @@ from .constants import (
     Msun_per_year_to_SI,
     day_to_sec,
     Rsun_au,
-    tiny_val,
 )
 from .utils import surface_integral, spherical_to_cartesian
 from .temperature import logRadLoss_to_T, T_to_logRadLoss
@@ -31,12 +30,18 @@ class Star:
         self.M_kg = self.M * Msun
         self._m0 = self.Beq * 1.0
         self.S_m2 = 4 * np.pi * self.R_m ** 2
+        self.Rco = 100  # large init value
 
         self._vff = np.sqrt(self.M_kg * Ggrav * 2.0 / self.R_m)
         if self.P:
             self._veq = 2.0 * np.pi / (self.P * day_to_sec) * self.R_m
+            self._omega = 2 * np.pi / (self.P * day_to_sec)
+            self.Rco = (Ggrav * self.M_kg / self._omega ** 2) ** (
+                1 / 3
+            ) / self.R_m  # Rstar
         else:
             self._veq = 0.0
+            self._omega = 0.0
 
         return
 
@@ -214,7 +219,172 @@ class Grid:
             self.rho[mask] = 1e-5
         return
 
-    def add_magnetosphere(
+    def add_mag(
+        self,
+        star,
+        rmi=2.2,
+        rmo=3.0,
+        Mdot=1e-8,
+        beta=0.0,
+        Tmax=8000,
+        verbose=False,
+    ):
+        self._beta = beta
+        ma = np.deg2rad(self._beta)
+        self.Rmax = rmo
+
+        Rt_on_Rco = (2 / (2 + np.cos(ma) ** 2)) ** (1 / 3)
+        if rmo > Rt_on_Rco * star.Rco:
+            print("(ERROR) Outer truncation radius cannot be larger than alpha * Rco !")
+            print(
+                "rmo = %.3f R*; alpha = %.3f; Rco = %.3f R*"
+                % (rmo, Rt_on_Rco, star.Rco)
+            )
+            exit()
+
+        if self._beta != 0 and self._2d:
+            print(
+                "(add_magnetosphere) WARNING : Using a 2d grid for a non-axisymmetric model!"
+            )
+
+        self._Macc = Mdot * Msun_per_year_to_SI
+        self._Rt = rmi
+        self._dr = rmo - rmi
+
+        # coordinates tilted about z, in F'
+        self._xp = self.r * (self._cp * self._st * np.cos(ma) - self._ct * np.sin(ma))
+        self._yp = self.r * (self._sp * self._st)
+        self._zp = self.r * (self._cp * self._st * np.sin(ma) + self._ct * np.cos(ma))
+        Rp = np.sqrt(self._xp ** 2 + self._yp ** 2)
+
+        cpp = self._xp / Rp
+        spp = self._yp / Rp
+        ctp = self._zp / self.r
+        stp = Rp / self.r
+
+        # tanphi0 = (
+        #     np.cos(ma)
+        #     * self._st
+        #     * self._sp
+        #     / (np.cos(ma) * self._st * self._cp - np.sin(ma) * self._ct)
+        # )
+        # sinphi0 = self._yp / Rp
+        # r0 = self.r * sinphi0 ** 2 / (self._st ** 2 * self._sp ** 2)
+        r0 = (
+            self.r
+            * np.cos(ma) ** 2
+            / (
+                np.cos(ma) ** 2 * self._st ** 2
+                + np.sin(ma) ** 2 * self._ct ** 2
+                - 2 * np.cos(ma) * np.sin(ma) * self._st * self._ct * self._cp
+            )
+        )
+
+        if self._beta > 0:
+            self._laccr = (r0 >= rmi) * (r0 <= rmo) * (self._xp / Rp * self.z > 0)
+        else:  # axisymmetric
+            self._laccr = (r0 >= rmi) * (r0 <= rmo)
+
+        self.regions[self._laccr] = 1  # non-transparent regions.
+
+        # smaller arrays, only where accretion takes place
+        m = -2.0 * star._m0 / self.r[self._laccr] ** 3
+        self._B = np.zeros(self.v.shape)
+        # (Br, Btheta, Bphi)
+        self._B[0, self._laccr] = (
+            m * (self._st * self._cp * np.sin(ma) + self._ct * np.cos(ma))[self._laccr]
+        )
+        self._B[1, self._laccr] = (
+            -m
+            / 2
+            * (self._ct * self._cp * np.sin(ma) - self._st * np.cos(ma))[self._laccr]
+        )
+        self._B[2, self._laccr] = m / 2 * (self._sp * np.sin(ma))[self._laccr]
+        # self._B[0, self._laccr] = (
+        #     2.0
+        #     * m
+        #     * (
+        #         np.cos(ma) * self._ct[self._laccr]
+        #         + np.sin(ma) * self._cp[self._laccr] * self._st[self._laccr]
+        #     )
+        # )
+        # self._B[1, self._laccr] = m * (
+        #     np.cos(ma) * self._st[self._laccr]
+        #     - np.sin(ma) * self._cp[self._laccr] * self._ct[self._laccr]
+        # )
+        # self._B[2, self._laccr] = m * np.sin(ma) * self._sp[self._laccr]
+        B = self.get_B_module()
+
+        sig_z = self._sign_z[self._laccr]
+        v = (
+            2
+            * Ggrav
+            * star.M_kg
+            / star.R_m
+            * (1 / self.r[self._laccr] - 1 / r0[self._laccr])
+            + (self.R[self._laccr] ** 2 - r0[self._laccr] ** 2)
+            * (star.R_m * star._omega) ** 2
+        ) ** 0.5
+
+        vr = v * self._B[0, self._laccr] / B[self._laccr] * sig_z
+        vt = v * self._B[1, self._laccr] / B[self._laccr] * sig_z
+        vp = v * self._B[2, self._laccr] / B[self._laccr] * sig_z
+        self.v[0, self._laccr] = vr
+        self.v[1, self._laccr] = vt
+        self.v[2, self._laccr] = vp
+        V = self.get_v_module()
+
+        eta = 1.0  # mass-to-magnetic flux ration, set numerically
+        self.rho[self._laccr] = eta * B[self._laccr] / V[self._laccr]
+        # normalisation of the density
+        if self.structured:
+            # takes values at the stellar surface or at rmin.
+            # multiply mass_flux by rmin**2 ?
+            rhovr = self.rho[0] * self.v[0, 0] * (self.regions[0] == 1)
+            # integrate over the shock area
+            # mass_flux in units of rhovr
+            mass_flux, dOmega = surface_integral(
+                self.grid[1], self.grid[2], -rhovr, axi_sym=self._2d
+            )
+            # similar to
+            # mf = (0.5*(-rhovr[0,1:,1:] - rhovr[0,:-1,:-1]) * abs(ct[:,:-1]) * dp[1:,:]).sum()
+            # with ct = np.diff(self._ct[0],axis=0); dp = np.diff(self.phi[0],axis=1)
+            if verbose:
+                print("dOmega = %.4f" % (dOmega))
+                print("mass flux (before norm) = %.4e [v_r B/V]" % mass_flux)
+            rho0 = self._Macc / mass_flux / star.R_m ** 2
+        else:
+            print("Error unstructured grid not yet")
+        self.rho[self._laccr] *= rho0
+
+        # recompute mass flux after normalisation
+        mass_flux_check = (
+            surface_integral(
+                self.grid[1], self.grid[2], -rhovr * rho0, axi_sym=self._2d
+            )[0]
+            * star.R_m ** 2
+        )
+        if verbose:
+            print(
+                "Mass flux (after norm) = %.4e Msun.yr^-1"
+                % (mass_flux_check / Msun_per_year_to_SI)
+            )
+            print("(check) Mdot/Mdot_input = %.3f" % (mass_flux_check / self._Macc))
+        if abs(mass_flux_check / self._Macc - 1.0) > 1e-5:
+            print(mass_flux_check, self._Macc)
+            print(
+                "WARNING : problem of normalisation of mass flux in self.add_magnetosphere()."
+            )
+
+        # Computes the temperature of the form Lambda_cool = Qheat / nH^2
+        Q = B[self._laccr]
+        rl = Q * self.rho[self._laccr] ** -2
+        lgLambda = np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax)
+        self.T[self._laccr] = logRadLoss_to_T(lgLambda)
+
+        return
+
+    def add_magnetosphere_v1(
         self,
         star,
         rmi=2.2,
@@ -289,8 +459,6 @@ class Grid:
         # )  # rMp, rlim ?
         fact = (1.0 / self.r - 1.0 / rM) ** 0.5
         # -> cannot be rMp ?
-        # the wall can be included form the starting point of the field lines ?
-        self._zd = np.fmax(np.zeros(self.r.shape), self.r ** 2 - rMp ** 2) ** 0.5
 
         # condition for accreting field lines
         # -> Axisymmetric case #
@@ -537,7 +705,9 @@ class Grid:
         self.Rmax = 0
         return
 
-    def _write(self, filename, Voronoi=False, Tring=0, laccretion=True):
+    def _write(
+        self, filename, Voronoi=False, Thp=0, Tpre_shock=9000.0, laccretion=True
+    ):
         """
         **Building**
 
@@ -558,7 +728,8 @@ class Grid:
             vfield_coord = 2
         header = (
             "%d\n" % (vfield_coord)
-            + "{:4.4f}".format(Tring)
+            + "{:4.4f}".format(Thp)
+            + " {:4.4f}".format(Tpre_shock)
             + " {:b}".format(laccretion)
         )
 
