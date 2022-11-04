@@ -290,6 +290,7 @@ class Grid:
         self.regions[self._laccr] = 1  # non-transparent regions.
 
         # smaller arrays, only where accretion takes place
+        # - because vr must be negative around the pole. x2 because _m0 is at the equator.
         m = -2.0 * star._m0 / self.r[self._laccr] ** 3
         self._B = np.zeros(self.v.shape)
         # (Br, Btheta, Bphi)
@@ -302,19 +303,6 @@ class Grid:
             * (self._ct * self._cp * np.sin(ma) - self._st * np.cos(ma))[self._laccr]
         )
         self._B[2, self._laccr] = m / 2 * (self._sp * np.sin(ma))[self._laccr]
-        # self._B[0, self._laccr] = (
-        #     2.0
-        #     * m
-        #     * (
-        #         np.cos(ma) * self._ct[self._laccr]
-        #         + np.sin(ma) * self._cp[self._laccr] * self._st[self._laccr]
-        #     )
-        # )
-        # self._B[1, self._laccr] = m * (
-        #     np.cos(ma) * self._st[self._laccr]
-        #     - np.sin(ma) * self._cp[self._laccr] * self._ct[self._laccr]
-        # )
-        # self._B[2, self._laccr] = m * np.sin(ma) * self._sp[self._laccr]
         B = self.get_B_module()
 
         sig_z = self._sign_z[self._laccr]
