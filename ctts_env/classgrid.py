@@ -207,7 +207,9 @@ class Grid:
                 )
             )
             # wall following accretion column building
-            # rM = self.r ** 3 / (self._xp ** 2 + self._yp ** 2)
+            # zmax = Aw
+            # rmax = np.sqrt(Aw ** 2 + self.R[self._lmag].max() ** 2)
+            # rM = rmax ** 3 / (self._xp ** 2 + self._yp ** 2)
             # col_mask = (rM > Rwi) * (rM <= Rwi + dwall)
             # north = col_mask * self.z > 0
             # south = col_mask * self.z < 0
@@ -329,13 +331,36 @@ class Grid:
         vr = v * self._B[0, self._laccr] / B[self._laccr] * sig_z
         vt = v * self._B[1, self._laccr] / B[self._laccr] * sig_z
         vp = v * self._B[2, self._laccr] / B[self._laccr] * sig_z
+        u_phi = star._veq * self.R[self._laccr] + vp
         self.v[0, self._laccr] = vr
         self.v[1, self._laccr] = vt
-        self.v[2, self._laccr] = vp
-        V = self.get_v_module()
+        self.v[2, self._laccr] = u_phi
+        V = vr * vr + vt * vt + vp * vp
+
+        # Compute the inveriant e - lOmega*
+        self._invariant_part1 = 0.5 * (vr * vr + vt * vt + u_phi * u_phi)  # u^2 / 2
+        self._invariant_part2 = (
+            -Ggrav * star.M_kg / (self.r[self._laccr] * star.R_m)
+        )  # -GM/R
+        self._invariant_part3 = (
+            -(star.R_m * self.R[self._laccr]) * star._omega * self.v[2, self._laccr]
+        )  # -r u_phi * Omega*
+        self._invariant_part4 = (
+            -Ggrav * star.M_kg / (star.R_m * r0[self._laccr])
+        )  # -GM/R0
+        self._invariant_part5 = (
+            -0.5 * (star.R_m * r0[self._laccr]) ** 2 * star._omega ** 2
+        )  # 1/2 R0^2 * Omega*^2
+        self._invariant = (
+            self._invariant_part1
+            + self._invariant_part2
+            + self._invariant_part3
+            - self._invariant_part4
+            - self._invariant_part5
+        )  # = 0
 
         eta = 1.0  # mass-to-magnetic flux ration, set numerically
-        self.rho[self._laccr] = eta * B[self._laccr] / V[self._laccr]
+        self.rho[self._laccr] = eta * B[self._laccr] / V
         # normalisation of the density
         if self.structured:
             # takes values at the stellar surface or at rmin.
@@ -1026,9 +1051,14 @@ class Grid:
                         % (self._Rt, self._Rt + self._dr),
                         file=fout,
                     )
-                    print(
-                        "no sec. columns ? %s" % ("No", "Yes")[self._no_sec], file=fout
-                    )
+                    # with new mag, there is no main/sec columns
+                    try:  # tmp
+                        print(
+                            "no sec. columns ? %s" % ("No", "Yes")[self._no_sec],
+                            file=fout,
+                        )
+                    except:
+                        pass
                     print("beta_ma = %lf deg" % self._beta, file=fout)
                     print(
                         "Macc = %.3e Msun/yr" % (self._Macc / Msun_per_year_to_SI),
