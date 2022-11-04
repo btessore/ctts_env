@@ -359,7 +359,7 @@ class Grid:
             - self._invariant_part5
         )  # = 0
 
-        eta = 1.0  # mass-to-magnetic flux ration, set numerically
+        eta = 1.0  # mass-to-magnetic flux ratio, set numerically
         self.rho[self._laccr] = eta * B[self._laccr] / V
         # normalisation of the density
         if self.structured:
