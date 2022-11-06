@@ -116,6 +116,7 @@ class Grid:
 
         self.rho = np.zeros(self.shape)
         self.T = np.zeros(self.shape)
+        self.ne = np.zeros(self.shape)  # electronic density
 
         self.Rmax = 0
 
@@ -720,16 +721,21 @@ class Grid:
         return
 
     def _write(
-        self, filename, Voronoi=False, Thp=0, Tpre_shock=9000.0, laccretion=True
+        self,
+        filename,
+        Thp=0,
+        Tpre_shock=9000.0,
+        laccretion=True,
+        Voronoi=False,
+        mask=[],
     ):
         """
-        **Building**
 
         This method writes the Grid() instance to an ascii file, to be used
         by the RT code MCFOST.
 
-        if Voronoi, the data coordinates and vectors are in cartesian
-        otherwise spherical, in AU.
+        if Voronoi, the data coordinates and vectors are in cartesian coordinates in AU.
+        mask cells for Voronoi only.
 
         """
         if Voronoi and not self._volume_set:
@@ -738,8 +744,26 @@ class Grid:
 
         if Voronoi:
             vfield_coord = 1
+            v1, v2, v3 = self.get_v_cart()
+            x1 = self.x.flatten()
+            x2 = self.y.flatten()
+            x3 = self.z.flatten()
+            Nrec = 12
+            fmt = ["%.8e"] * 10 + ["%d"] + ["%.8e"]
+            # alpha_smooth = max(1.0,1.6*(128//self.shape[-1])**(1/3))
+            hsmooth = 1 / 3 * self.volume ** (1 / 3)
+            if ~np.any(mask):
+                mask = [True] * self.Ncells
         else:
             vfield_coord = 2
+            v1, v2, v3 = self.get_v_cyl()
+            x1 = self.R.flatten()
+            x2 = self.z.flatten()
+            x3 = self.phi.flatten()
+            Nrec = 11
+            fmt = ["%.8e"] * 10 + ["%d"]
+            mask = [True] * self.Ncells
+
         header = (
             "%d\n" % (vfield_coord)
             + "{:4.4f}".format(Thp)
@@ -747,24 +771,28 @@ class Grid:
             + " {:b}".format(laccretion)
         )
 
-        data = np.zeros((11, self.Ncells))
+        data = np.zeros((Nrec, np.count_nonzero(mask)))
         data[0], data[1], data[2] = (
-            self.R.flatten(),
-            self.z.flatten(),
-            self.phi.flatten(),
+            x1.flatten()[mask],
+            x2.flatten()[mask],
+            x3.flatten()[mask],
         )  # units does not matter here, only if Voronoi
         data[3], data[4], data[5] = (
-            self.T.flatten(),
-            self.rho.flatten(),
-            self.rho.flatten() * 0,
+            self.T.flatten()[mask],
+            self.rho.flatten()[mask],
+            self.ne.flatten()[mask],
         )
-        vR, vz, vphi = self.get_v_cyl()
-        data[6], data[7], data[8] = vR.flatten(), vz.flatten(), vphi.flatten()
+        data[6], data[7], data[8] = (
+            v1.flatten()[mask],
+            v2.flatten()[mask],
+            v3.flatten()[mask],
+        )
         dz = np.copy(self.regions)
         dz[dz > 0] = 1
-        data[9], data[10] = np.zeros(self.Ncells), dz.flatten()
+        data[9], data[10] = np.zeros(np.count_nonzero(mask)), dz.flatten()[mask]
 
-        fmt = ["%.8e"] * 10 + ["%d"]
+        if Voronoi:
+            data[Nrec - 1] = hsmooth.flatten()[mask]
         np.savetxt(filename, data.T, header=header, comments="", fmt=fmt)
 
         return
