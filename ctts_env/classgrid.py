@@ -290,6 +290,7 @@ class Grid:
         self.regions[self._laccr] = 1  # non-transparent regions.
 
         # smaller arrays, only where accretion takes place
+        # m is the magnetic moment at the pole and at r=1.
         # - because vr must be negative around the pole. x2 because _m0 is at the equator.
         m = -2.0 * star._m0 / self.r[self._laccr] ** 3
         self._B = np.zeros(self.v.shape)
@@ -323,7 +324,7 @@ class Grid:
         self.v[0, self._laccr] = vr
         self.v[1, self._laccr] = vt
         self.v[2, self._laccr] = u_phi
-        V = vr * vr + vt * vt + vp * vp
+        V = np.sqrt(vr * vr + vt * vt + vp * vp)
 
         # Compute the inveriant e - lOmega*
         self._invariant_part1 = 0.5 * (vr * vr + vt * vt + u_phi * u_phi)  # u^2 / 2
@@ -365,15 +366,15 @@ class Grid:
             if verbose:
                 print("dOmega = %.4f" % (dOmega))
                 print("mass flux (before norm) = %.4e [v_r B/V]" % mass_flux)
-            rho0 = self._Macc / mass_flux / star.R_m ** 2
+            eta = self._Macc / mass_flux / star.R_m ** 2
         else:
             print("Error unstructured grid not yet")
-        self.rho[self._laccr] *= rho0
+        self.rho[self._laccr] *= eta
 
         # recompute mass flux after normalisation
         mass_flux_check = (
             surface_integral(
-                self.grid[1], self.grid[2], -rhovr * rho0, axi_sym=self._2d
+                self.grid[1], self.grid[2], -rhovr * eta, axi_sym=self._2d
             )[0]
             * star.R_m ** 2
         )
