@@ -143,7 +143,7 @@ class Grid:
 
         # Volume from an external grid ?
         if np.any(vol):
-            self.volume = vol
+            self.volume = np.copy(vol)
         # Estimate the volume from this grid
         else:
             dr = np.gradient(self.r, axis=0)
