@@ -234,18 +234,18 @@ class Grid:
         V0=0,
     ):
         """
-        star 	:: An instance of the class Star
+        star    :: An instance of the class Star
 
-        rmi 	:: inner radius of the magnetosphere (Rstar)
-        rmo  	:: outer radius of the magnetosphere (Rstar)
-                   rmo must be lower than (2 / (2 + cos(beta) ** 2)) ** (1 / 3) Rco
-        Mdot 	:: mass accretion rate (Msun/yr)
-        beta 	:: obliquity of the magnetic dipole (degrees). Beta must be > 0 and < 90 at the moment.
+        rmi     :: inner radius of the magnetosphere (Rstar)
+        rmo     :: outer radius of the magnetosphere (Rstar)
+                    rmo must be lower than (2 / (2 + cos(beta) ** 2)) ** (1 / 3) Rco
+        Mdot    :: mass accretion rate (Msun/yr)
+        beta    :: obliquity of the magnetic dipole (degrees). Beta must be > 0 and < 90 at the moment.
                                 The magnetic field is tilted about the rotation axis (// z) of the star. The tilted
                                 dipole is // to x axis.
         verbose :: print info if True
-        Tmax 	:: value of the temperature maximum in the magnetosphere
-        V0 	 	:: value of the velocity at the injection point (m/s)
+        Tmax    :: value of the temperature maximum in the magnetosphere
+        V0      :: value of the velocity at the injection point (m/s)
         """
         self._beta = beta
         ma = np.deg2rad(self._beta)
