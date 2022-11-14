@@ -245,7 +245,7 @@ class Grid:
                                 dipole is // to x axis.
         verbose :: print info if True
         Tmax 	:: value of the temperature maximum in the magnetosphere
-        V0 	    :: value of the velocity at the injection point (m/s)
+        V0 	 	:: value of the velocity at the injection point (m/s)
         """
         self._beta = beta
         ma = np.deg2rad(self._beta)
