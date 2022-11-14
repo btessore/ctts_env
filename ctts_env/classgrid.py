@@ -231,7 +231,22 @@ class Grid:
         beta=0.0,
         Tmax=8000,
         verbose=False,
+        V0=0,
     ):
+        """
+        star 	:: An instance of the class Star
+
+        rmi 	:: inner radius of the magnetosphere (Rstar)
+        rmo  	:: outer radius of the magnetosphere (Rstar)
+                   rmo must be lower than (2 / (2 + cos(beta) ** 2)) ** (1 / 3) Rco
+        Mdot 	:: mass accretion rate (Msun/yr)
+        beta 	:: obliquity of the magnetic dipole (degrees). Beta must be > 0 and < 90 at the moment.
+                                The magnetic field is tilted about the rotation axis (// z) of the star. The tilted
+                                dipole is // to x axis.
+        verbose :: print info if True
+        Tmax 	:: value of the temperature maximum in the magnetosphere
+        V0 	    :: value of the velocity at the injection point (m/s)
+        """
         self._beta = beta
         ma = np.deg2rad(self._beta)
         self.Rmax = rmo
@@ -265,28 +280,34 @@ class Grid:
         ctp = self._zp / self.r
         stp = Rp / self.r
 
-        # tanphi0 = (
-        #     np.cos(ma)
-        #     * self._st
-        #     * self._sp
-        #     / (np.cos(ma) * self._st * self._cp - np.sin(ma) * self._ct)
-        # )
-        # sinphi0 = self._yp / Rp
-        # r0 = self.r * sinphi0 ** 2 / (self._st ** 2 * self._sp ** 2)
-        r0 = (
-            self.r
-            * np.cos(ma) ** 2
-            / (
-                np.cos(ma) ** 2 * self._st ** 2
-                + np.sin(ma) ** 2 * self._ct ** 2
-                - 2 * np.cos(ma) * np.sin(ma) * self._st * self._ct * self._cp
-            )
+        tanphi0 = (
+            np.cos(ma)
+            * self._st
+            * self._sp
+            / (np.cos(ma) * self._st * self._cp - np.sin(ma) * self._ct)
         )
+        phi0 = np.arctan(tanphi0)
+        sinphi0 = np.sin(phi0)
+        r0 = (self.r / self._st ** 2) * (sinphi0 ** 2 / self._sp ** 2)
+        # r0 = (
+        #     self.r
+        #     * np.cos(ma) ** 2
+        #     / (
+        #         np.cos(ma) ** 2 * self._st ** 2
+        #         + np.sin(ma) ** 2 * self._ct ** 2
+        #         - 2 * np.cos(ma) * np.sin(ma) * self._st * self._ct * self._cp
+        #     )
+        # )
+        v_square = (
+            2 * Ggrav * star.M_kg / star.R_m * (1 / self.r - 1 / r0)
+            + (self.R ** 2 - r0 ** 2) * (star.R_m * star._omega) ** 2
+            + V0 ** 2
+        )
+        self._laccr = (v_square >= 0) * (r0 >= rmi) * (r0 <= rmo)
 
-        if self._beta > 0:
-            self._laccr = (r0 >= rmi) * (r0 <= rmo) * (self._xp / Rp * self.z > 0)
-        else:  # axisymmetric
-            self._laccr = (r0 >= rmi) * (r0 <= rmo)
+        ##### TMP #####
+        self._laccr *= cpp * self.z >= 0
+        ###############
 
         self.regions[self._laccr] = 1  # non-transparent regions.
 
@@ -308,15 +329,7 @@ class Grid:
         B = self.get_B_module()
 
         sig_z = self._sign_z[self._laccr]
-        v = (
-            2
-            * Ggrav
-            * star.M_kg
-            / star.R_m
-            * (1 / self.r[self._laccr] - 1 / r0[self._laccr])
-            + (self.R[self._laccr] ** 2 - r0[self._laccr] ** 2)
-            * (star.R_m * star._omega) ** 2
-        ) ** 0.5
+        v = np.sqrt(v_square[self._laccr])
 
         vr = v * self._B[0, self._laccr] / B[self._laccr] * sig_z
         vt = v * self._B[1, self._laccr] / B[self._laccr] * sig_z
@@ -327,7 +340,7 @@ class Grid:
         self.v[2, self._laccr] = u_phi
         V = np.sqrt(vr * vr + vt * vt + vp * vp)
 
-        # Compute the inveriant e - lOmega*
+        # Compute the inveriant e - lOmega* (V0 not included!)
         self._invariant_part1 = 0.5 * (vr * vr + vt * vt + u_phi * u_phi)  # u^2 / 2
         self._invariant_part2 = (
             -Ggrav * star.M_kg / (self.r[self._laccr] * star.R_m)
@@ -349,6 +362,7 @@ class Grid:
             - self._invariant_part5
         )  # = 0
 
+        # TO DO: define a non-constant eta
         eta = 1.0  # mass-to-magnetic flux ratio, set numerically
         self.rho[self._laccr] = eta * B[self._laccr] / V
         # normalisation of the density
@@ -408,7 +422,7 @@ class Grid:
         beta=0.0,
         Tmax=8000,
         verbose=False,
-        no_sec=False,
+        no_sec=True,
     ):
 
         """
@@ -467,13 +481,8 @@ class Grid:
         rMp = self.r / yp
         rlim = rMp * sintheta0p_sq
 
-        # should not be negative in the accretin columns, hence nan. Hopefully it is close to 0.
-        # When negative, this trick avoids nan/inf.
-        # fact = (
-        #     np.fmax(np.zeros(self.r.shape), (1.0 / self.r - 1.0 / rM)) ** 0.5
-        # )  # rMp, rlim ?
+        # should not be negative in the accretion columns.
         fact = (1.0 / self.r - 1.0 / rM) ** 0.5
-        # -> cannot be rMp ?
 
         # condition for accreting field lines
         # -> Axisymmetric case #
