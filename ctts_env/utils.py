@@ -89,3 +89,24 @@ def shock_area(Rt, dr, beta=0, f=1):
                 f = 0.5. (f in ~[0.5, 1])
     """
     return f * Gamma(Rt, dr) * np.cos(np.deg2rad(beta))
+
+
+def fw3d_average(d):
+    """'
+    d is a 3d array
+    Faster in python than explicit sum.
+    """
+    from scipy import ndimage
+
+    shape = d.shape
+
+    # 	kernel = np.ones((3,3,3)) / 27
+    kernel = np.zeros((3, 3, 3))
+    K1 = np.matrix("1 2 1; 2 4 2; 1 2 1")
+    K2 = np.matrix("2 4 2; 4 8 4; 2 4 2")
+    K3 = np.matrix("1 2 1; 2 4 2; 1 2 1")
+    kernel[0] = K1
+    kernel[1] = K2
+    kernel[2] = K3
+    kernel /= 64
+    return ndimage.convolve(d, kernel, mode="nearest")
