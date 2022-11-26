@@ -110,3 +110,12 @@ def fw3d_average(d):
     kernel[2] = K3
     kernel /= 64
     return ndimage.convolve(d, kernel, mode="nearest")
+
+
+def reduction(q, l=1):
+    """
+    Reduce the data information with full-weighted method.
+    """
+    for k in range(l):
+        q = fw3d_average(q)
+    return

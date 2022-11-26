@@ -6,7 +6,7 @@ from .constants import (
     day_to_sec,
     Rsun_au,
 )
-from .utils import surface_integral, spherical_to_cartesian, fw3d_average
+from .utils import surface_integral, spherical_to_cartesian, reduction
 from .temperature import logRadLoss_to_T, T_to_logRadLoss
 import numpy as np
 import sys
@@ -129,18 +129,6 @@ class Grid:
 
         self._volume_set = False
 
-        return
-
-    def reduction(self, l=1):
-        """
-        Reduce the data information with full-weighted method.
-        """
-        for k in range(l):
-            self.rho = fw3d_average(self.rho)
-            self.T = fw3d_average(self.rho)
-            for iv in range(3):
-                self.v[iv] = fw3d_average(self.v[iv])
-        self.regions[(self.rho > 0) * (self.regions == 1)] = 1
         return
 
     def calc_cells_volume(self, vol=[]):
@@ -376,6 +364,10 @@ class Grid:
 
         # TO DO: define a non-constant eta
         eta = 1.0  # mass-to-magnetic flux ratio, set numerically
+        # if l:
+        #     V = reduction(V,l)
+        #     B = reduction(B,l)
+
         self.rho[self._laccr] = eta * B[self._laccr] / V
         # normalisation of the density
         if self.structured:
