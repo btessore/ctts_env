@@ -64,8 +64,7 @@ def plot_shock_surface(
 ):
     """
     plot the shock surface for a magnetic configuration
-    and for different obliquities from 0 to 90 degrees
-    with and without secondary columns
+    and for different obliquities from 0 to 90 degrees.
 
     star is an instance of ctts_env.Star(), it is mandatory for computing the shock
     surface from the density
@@ -73,9 +72,9 @@ def plot_shock_surface(
     """
 
     # generate a grid at the surface of te star
-    rr = [1.0]
-    tt = np.linspace(0, np.pi, Nt)
-    pp = np.linspace(0, 2 * np.pi, Np)
+    rr = [1.0]  # np.linspace(1.0, star.Rco, 10)
+    tt = np.linspace(1e-5, np.pi - 1e-5, Nt)
+    pp = np.linspace(1e-5, 2 * np.pi - 1e-5, Np)
     r, t, p = np.meshgrid(rr, tt, pp, indexing="ij")
 
     g = ctts_env.Grid(r, t, p)
@@ -95,8 +94,8 @@ def plot_shock_surface(
     for k, tilt in enumerate(beta_ma):
         # g.add_magnetosphere_v1(star, rmi=rmi, rmo=rmo, Mdot=Mdot, beta=tilt)
         g.add_mag(star, rmi=rmi, rmo=rmo, Mdot=Mdot, beta=tilt)
-        #         g._plot_3d(view=(tilt,90),show_star=True)
-        plt.show()
+        # g._plot_3d(view=(0, 90), show_star=True)
+        # plt.show()
         if verbose:
             print("k = %d/%d" % (k + 1, Nobliquity))
             print(" beta = %.3f" % tilt)
@@ -171,7 +170,8 @@ def plot_shock_surface(
 if __name__ == "__main__":
     # execute test code
 
-    star = ctts_env.Star(2, 0.8, 4000, None, 1)
+    P = None
+    star = ctts_env.Star(2, 0.8, 4000, P, 1)
 
     Nt = 300
     Np = 300
