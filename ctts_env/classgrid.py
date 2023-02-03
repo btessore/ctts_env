@@ -280,15 +280,15 @@ class Grid:
         ctp = self._zp / self.r
         stp = Rp / self.r
 
-        tanphi0 = (
-            np.cos(ma)
-            * self._st
-            * self._sp
-            / (np.cos(ma) * self._st * self._cp - np.sin(ma) * self._ct)
-        )
-        phi0 = np.arctan(tanphi0)
-        sinphi0 = np.sin(phi0)
-        r0 = (self.r / self._st ** 2) * (sinphi0 ** 2 / self._sp ** 2)
+        # tanphi0 = (
+        #     np.cos(ma)
+        #     * self._st
+        #     * self._sp
+        #     / (np.cos(ma) * self._st * self._cp - np.sin(ma) * self._ct)
+        # )
+        # phi0 = np.arctan(tanphi0)
+        # sinphi0 = np.sin(phi0)
+        # r0 = (self.r / self._st ** 2) * (sinphi0 ** 2 / self._sp ** 2)
         # r0 = (
         #     self.r
         #     * np.cos(ma) ** 2
@@ -298,17 +298,81 @@ class Grid:
         #         - 2 * np.cos(ma) * np.sin(ma) * self._st * self._ct * self._cp
         #     )
         # )
-        v_square = (
-            2 * Ggrav * star.M_kg / star.R_m * (1 / self.r - 1 / r0)
-            + (self.R ** 2 - r0 ** 2) * (star.R_m * star._omega) ** 2
-            + V0 ** 2
-        )
-        self._laccr = (v_square >= 0) * (r0 >= rmi) * (r0 <= rmo)
+        # v_square = (
+        #     2 * Ggrav * star.M_kg / star.R_m * (1 / self.r - 1 / r0)
+        #     + (self.R ** 2 - r0 ** 2) * (star.R_m * star._omega) ** 2
+        #     + V0 ** 2
+        # )
 
         ##### TMP #####
-        self._laccr *= cpp * self.z >= 0
+        # ##self._laccr *= cpp * self.z >= 0
         ###############
 
+        # to test
+        # check the points for which the field line passing by these points accrete
+        v_square = np.zeros(self.shape)
+        # if the number of point is not enough, the field line
+        # might not be resolve leading to unconsistent results
+        # like positive while some points are negative
+        N_fl = 10000
+        for k in range(self.shape[2]):
+            for j in range(self.shape[1]):
+                for i in range(self.shape[0]):
+                    tanphi0 = (
+                        np.cos(ma)
+                        * self._st[i, j, k]
+                        * self._sp[i, j, k]
+                        / (
+                            np.cos(ma) * self._st[i, j, k] * self._cp[i, j, k]
+                            - np.sin(ma) * self._ct[i, j, k]
+                        )
+                    )
+                    phi0 = np.arctan(tanphi0)
+                    r0 = (
+                        self.r[i, j, k]
+                        * np.sin(phi0) ** 2
+                        / self._st[i, j, k] ** 2
+                        / self._sp[i, j, k] ** 2
+                    )
+                    if r0 >= rmi and r0 <= rmo:
+                        ts = np.arcsin(
+                            np.sqrt(
+                                self.r[i, j, k]
+                                / r0
+                                * np.sin(phi0) ** 2
+                                / self._sp[i, j, k] ** 2
+                            )
+                        )
+                        te = np.pi / 2
+                        # if self.z[i, j, k] < 0:
+                        #     ts = np.pi - ts
+                        t_fl = np.linspace(ts, te, N_fl)
+
+                        # build the field line the point (i,j,k) belongs to, from the disc to the stellar surface
+                        y_fl = np.sin(t_fl) ** 2
+                        r_fl = r0 * self._sp[i, j, k] ** 2 / np.sin(phi0) ** 2 * y_fl
+                        v2_fl = (
+                            2 * Ggrav * star.M_kg / star.R_m * (1 / r_fl - 1 / r0)
+                            + (y_fl * r_fl ** 2 - r0 ** 2)
+                            * (star.R_m * star._omega) ** 2
+                            + V0 ** 2
+                        )
+
+                        if np.alltrue(v2_fl > 0):
+                            v_square[i, j, k] = (
+                                2
+                                * Ggrav
+                                * star.M_kg
+                                / star.R_m
+                                * (1 / self.r[i, j, k] - 1 / r0)
+                                + (self.R[i, j, k] ** 2 - r0 ** 2)
+                                * (star.R_m * star._omega) ** 2
+                                + V0 ** 2
+                            )
+        #############################################################################
+
+        # ###self._laccr = (v_square >= 0) * (r0 >= rmi) * (r0 <= rmo)
+        self._laccr = v_square > 0
         self.regions[self._laccr] = 1  # non-transparent regions.
 
         # smaller arrays, only where accretion takes place
@@ -341,26 +405,27 @@ class Grid:
         V = np.sqrt(vr * vr + vt * vt + vp * vp)
 
         # Compute the inveriant e - lOmega* (V0 not included!)
-        self._invariant_part1 = 0.5 * (vr * vr + vt * vt + u_phi * u_phi)  # u^2 / 2
-        self._invariant_part2 = (
-            -Ggrav * star.M_kg / (self.r[self._laccr] * star.R_m)
-        )  # -GM/R
-        self._invariant_part3 = (
-            -(star.R_m * self.R[self._laccr]) * star._omega * self.v[2, self._laccr]
-        )  # -r u_phi * Omega*
-        self._invariant_part4 = (
-            -Ggrav * star.M_kg / (star.R_m * r0[self._laccr])
-        )  # -GM/R0
-        self._invariant_part5 = (
-            -0.5 * (star.R_m * r0[self._laccr]) ** 2 * star._omega ** 2
-        )  # 1/2 R0^2 * Omega*^2
-        self._invariant = (
-            self._invariant_part1
-            + self._invariant_part2
-            + self._invariant_part3
-            - self._invariant_part4
-            - self._invariant_part5
-        )  # = 0
+        # for testing -> r0 is not defined beware
+        # self._invariant_part1 = 0.5 * (vr * vr + vt * vt + u_phi * u_phi)  # u^2 / 2
+        # self._invariant_part2 = (
+        #     -Ggrav * star.M_kg / (self.r[self._laccr] * star.R_m)
+        # )  # -GM/R
+        # self._invariant_part3 = (
+        #     -(star.R_m * self.R[self._laccr]) * star._omega * self.v[2, self._laccr]
+        # )  # -r u_phi * Omega*
+        # self._invariant_part4 = (
+        #     -Ggrav * star.M_kg / (star.R_m * r0[self._laccr])
+        # )  # -GM/R0
+        # self._invariant_part5 = (
+        #     -0.5 * (star.R_m * r0[self._laccr]) ** 2 * star._omega ** 2
+        # )  # 1/2 R0^2 * Omega*^2
+        # self._invariant = (
+        #     self._invariant_part1
+        #     + self._invariant_part2
+        #     + self._invariant_part3
+        #     - self._invariant_part4
+        #     - self._invariant_part5
+        # )  # = 0
 
         # TO DO: define a non-constant eta
         eta = 1.0  # mass-to-magnetic flux ratio, set numerically
