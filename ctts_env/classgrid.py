@@ -123,9 +123,9 @@ class Grid:
         self.regions = np.zeros(self.shape, dtype=int)
         self.regions_label = ["", "Accr. Col", "Disc Wind", "Disc", "dark"]
         self.regions_id = [0, 1, 2, 3, -1]
-        # regions==0: transparent
-        # regions==-1: dark
-        # regions==1: accretion columns
+        # 0 : transparent
+        # -1: dark
+        # 1 : accretion columns
 
         self._volume_set = False
 
@@ -503,6 +503,10 @@ class Grid:
 
         verbose :: print info if True
         no_sec 	:: flag to remove secondary columns
+
+        NOTE: old version working but not totally fully consistent.
+              here for debug and comparisons with old models.
+
         """
 
         self._Rt = rmi
@@ -564,8 +568,7 @@ class Grid:
         #######################
 
         # condition for accreting field lines
-        lmag = (rlim >= rmi) * (rlim <= rmo)  # add check to test it is empty ?
-        # regions in the magnetosphere with fact <= 0 are set transparent.
+        lmag = (rlim >= rmi) * (rlim <= rmo)
         self._lmag = lmag
 
         # Secondary and main columns
