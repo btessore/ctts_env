@@ -685,7 +685,7 @@ class Grid:
 
         return
 
-    def add_disc_wind(
+    def add_disc_wind_knigge95(
         self,
         star,
         Rin=3.0,
@@ -697,75 +697,76 @@ class Grid:
         zs=15,
         beta=0.5,
         fesc=2,
+        Tmax=10000,
     ):
         """
-        ** builing **
-                Mloss :: mass ejection rate in Msun/yr
-                gamma :: temperature exponant such that T \propto R**gamma
-                alpha :: mass loss rate power law per unit area
-                ls :: disc wind length scale in unit of Rin
-                zs :: location above or below the midplane at R=0 where the field lines diverge (Source location).
-                beta :: exponent of the radial velocity of the wind (acceleration parameter)
-                fesc :: terminal velocity of the disc wind in unit of the escape velocity
+        Mloss :: mass ejection rate in Msun/yr
+        gamma :: temperature exponant such that T \propto R**gamma
+        alpha :: mass loss rate power law per unit area
+        ls :: disc wind length scale in unit of Rin
+        zs :: location above or below the midplane at R=0 where the field lines diverge (Source location).
+        beta :: exponent of the radial velocity of the wind (acceleration parameter)
+        fesc :: terminal velocity of the disc wind in unit of the escape velocity
+        Tmax    :: Temperature max of the disc wind
         """
         ldw = (self.R >= Rin * (abs(self.z) + zs) / zs) * (
             self.R <= Rout * (abs(self.z) + zs) / zs
         )
         self.regions[ldw] = 2
-        # if not "vff" in star.keys():
-        # 	OmegasK = np.sqrt(star["M"]*Msun*GSI*2./star['R']/Rsun)
-        # else:
-        # 	OmegasK = star["vff"]
 
-        # p_ml = 4.0*gamma * alpha #assuming the mass loss / m2 varies with R as mloss = cste * R^p_ml.
-        # #p_ml + 1 should be < 0
+        p_ml = (
+            4.0 * gamma * alpha
+        )  # assuming the mass loss / m2 varies with R as mloss = cste * R^p_ml.
+        # p_ml + 1 should be < 0
         # if p_ml + 1 >= 0:
-        # 	print("dk_wind error: p_ml must be < 0 !",(p_ml))
-        # 	exit()
+        #     print("dk_wind error: p_ml must be < 0 !", (p_ml))
+        #     exit()
 
-        # l_dw = ls * Rin
-        # beta_dw = 0.5
-        # fesc = 2.0
-        # Mloss_si = Mloss * Msun_per_year_to_si
+        l_dw = ls * Rin
+        Mloss_SI = Mloss * Msun_per_year_to_SI
 
-        # #mloss_surf in kg/s/m2 prop to integral over RdR of R^p_ml
-        # if p_ml + 1 == -1:
-        # 	norm_mloss_surf_theo = abs( np.log(Rout) - np.log(Rin) )
-        # else:
-        # 	norm_mloss_surf_theo = (Rout**(p_ml + 2) - Rin**(p_ml + 2))/(p_ml + 2)
-        # norm_mloss_surf_theo = Mloss_si / norm_mloss_surf_theo * (star["R"]*Rsun)**-2 #in kg/s/m2 / R^(p_ml+2)
-        # #norm in kg/s/(Rstar_m * R)^2/R^p_ml
-        # #such that norm * Rm**p_ml in kg/s/m2
-        # norm_mloss = norm_mloss_surf_theo
+        # mloss_surf in kg/s/m2 prop to integral over RdR of R^p_ml
+        if p_ml + 1 == -1:
+            norm_mloss_surf_theo = abs(np.log(Rout) - np.log(Rin))
+        else:
+            norm_mloss_surf_theo = (Rout ** (p_ml + 2) - Rin ** (p_ml + 2)) / (p_ml + 2)
+        norm_mloss_surf_theo = (
+            Mloss_SI / norm_mloss_surf_theo * star.R_m ** -2
+        )  # in kg/s/m2 / R^(p_ml+2)
+        # norm in kg/s/(Rstar_m * R)^2/R^p_ml
+        # such that norm * Rm**p_ml in kg/s/m2
+        norm_mloss = norm_mloss_surf_theo
 
-        # dw = (g['R'] >= Rin * (abs(g['z']) + zs) / zs) * (g['R'] <= Rout * (abs(g['z']) + zs) / zs)
-        # g['dz'][dw] = 2
+        # the constant norm_mloss takes Rm in stellar radius
+        mloss_loc = norm_mloss * self.R[ldw] ** p_ml  # norm_mloss in kg/s/m2/R**p_ml
+        # for each Rm found the corresponding wi i.e., Rm for z=0
+        wi = zs / (abs(self.z[ldw]) + zs) * self.R[ldw]
+        vKz0 = (
+            star._vff / np.sqrt(2.0) / np.sqrt(wi)
+        )  # keplerian velocity express from escape velocity
+        vK = vKz0 * (wi / self.R[ldw])
 
-        # #smaller arrays of size np.count_nonzero(dw)
-        # sign_z = np.sign(g['z'])[dw]
+        # distance from the source point where the field lines diverge
+        q = np.sqrt(self.R ** 2 + (abs(self.z) + zs) ** 2)[ldw]
+        cos_delta = (abs(self.z)[ldw] + zs) / q
+        l = q - zs / cos_delta
+        vesc = star._vff / np.sqrt(self.R[ldw])
+        cs = 1e4 * (Rin / wi) ** 0.5  # m/s
+        vr = cs + (fesc * vesc - cs) * (1.0 - l_dw / (l + l_dw)) ** beta
+        vt = 0
+        vphi = vK
 
-        # #the constant norm_mloss takes Rm in stellar radius
-        # mloss_loc = norm_mloss * g['R'][dw] **p_ml #norm_mloss in kg/s/m2/R**p_ml
-        # #for each Rm found the corresponding wi i.e., Rm for z=0
-        # wi = zs / (abs(g['z'][dw]) + zs) * g['R'][dw]
-        # vKz0 = OmegasK / np.sqrt(2.0) / np.sqrt(wi)
-        # vK = vKz0 * (wi / g['R'][dw]) #output
+        # sintheta_dw = (self.z[ldw] + zs) / q
+        # vR = vr * sintheta  # +vtheta * costheta
+        # vz = sign_z * vr * np.sqrt(1.0 - sintheta * sintheta)  # -vtheta * sintheta
+        self.v[0, ldw] = vr
+        self.v[1, ldw] = vt
+        self.v[2, ldw] = vphi
 
-        # #distance from the source point where the field lines diverge
-        # q = np.sqrt( g['R']**2 + (abs(g["z"]) + zs)**2 )[dw]
-        # cos_delta = (abs(g["z"])[dw] + zs)  / q
-        # l = q - zs / cos_delta
-        # vesc = OmegasK / np.sqrt(g['R'][dw])
-        # cs = 1e4 * (Rin / wi)**0.5 #m/s
-        # vr = cs + (fesc*vesc  - cs) * (1.0 - ls/(l+ls))**beta
+        rho0 = mloss_loc / (vr * cos_delta) * (zs / (q * cos_delta)) ** 2
 
-        # sintheta_dw = (g['z'][dw] + zs) / q
-        # vR = vr * sintheta #+vtheta * costheta
-        # vz = sign_z * vr * np.sqrt(1.0 - sintheta * sintheta) #-vtheta * sintheta
-
-        # rho0 = mloss_loc / (vr * cos_delta) * (zs / (q * cos_delta))**2
-
-        # rho[dw] = rho0
+        self.rho[ldw] = rho0
+        self.T[ldw] = Tmax
         return
 
     def get_B_module(self):
@@ -957,16 +958,18 @@ class Grid:
             fig3D = plt.figure()
             ax3d = Axes3D(fig3D)
 
-        Rmax = self._Rt + self._dr
+        # Rmax = self._Rt + self._dr
         mask = self.rho > 0
+        Rmax = self.r[mask].max()
         mask_surf = mask.reshape(-1, self.shape[-1])
+        lmag = np.any(self.regions == 1)
 
         zhat = (0, 0, 1)
         xhat = (1, 0, 0)
         yhat = (0, 1, 0)
         color_axes = (0, 0, 0)
 
-        if self._beta != 0.0:
+        if lmag and self._beta != 0.0:
             bhat = (np.sin(np.deg2rad(self._beta)), 0, np.cos(np.deg2rad(self._beta)))
 
         # draw the star (all units in Rstar)
@@ -976,7 +979,11 @@ class Grid:
         rz = 1 * np.cos(rt)
 
         # draw a disc in the plane theta = pi/2 (z=0)
-        Rd, zd = np.mgrid[self._Rt : self._Rt * 10 : 1j * Ng, 0 : 0 : 1j * Ng]
+        r_disc_min = self.r[self.regions > 0].min()
+        r_disc_max = self.r[self.regions > 0].max()
+        if lmag:
+            r_disc_max *= 10
+        Rd, zd = np.mgrid[r_disc_min : r_disc_max : 1j * Ng, 0 : 0 : 1j * Ng]
         dx = Rd * np.cos(rp)
         dy = Rd * np.sin(rp)
         dz = zd
@@ -1023,7 +1030,7 @@ class Grid:
                     yhat[2],
                     color=color_axes,
                 )
-                if self._beta != 0:
+                if lmag and self._beta != 0:
                     mlab.quiver3d(
                         bhat[0],
                         bhat[1],
@@ -1066,7 +1073,7 @@ class Grid:
                 self.x[mask],
                 self.y[mask],
                 self.z[mask],
-                c=self.get_B_module()[mask],
+                c=self.rho[mask],  # self.get_B_module()[mask],
                 cmap=cmap,
             )
 
@@ -1099,7 +1106,7 @@ class Grid:
                     color=color_axes,
                 )
 
-                if self._beta != 0:
+                if lmag and self._beta != 0:
                     ax3d.quiver3D(
                         bhat[0],
                         bhat[1],
