@@ -178,9 +178,19 @@ class Grid:
         """
         return
 
-    def add_dark_disc(self, Rin, dwidth=0, wall=False, phi0=0, Rwi=1, Aw=1):
+    def add_dark_disc(self, Rin, dwidth=0, Td=0, wall=False, phi0=0, Rwi=1, Aw=1):
         """
         Optically thick and ultra-cool disc.
+        rho value does not matter (dark). Temperature
+        could be use for an emission component.
+
+        Rin :: inner radius at which the disc starts
+        dwidth  :: the constant width (in the z direction) of the disc
+        Td  :: (constant) Temperature of the disc
+        wall    :: add a wall to the disc ?
+        phi0    :: origin of the wall in the azimuthal plane (max at phi0)
+        Rwi :: inner radius of the wall (where it starts)
+        Aw  :: width of the wall (in the z direction)
         """
         # zmin = dwidth + np.amin(abs(self.z), axis=(1, 2))
         # mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, None])
@@ -188,6 +198,7 @@ class Grid:
         mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, :])
         self.regions[mask] = -1
         self.rho[mask] = 1e-5  # kg/m3
+        self.T[mask] = Td
         # add wall after disc
         if (wall) and (not self._2d):
             midplane = np.argmin((self.theta[0, :, 0] - np.pi / 2) ** 2)
