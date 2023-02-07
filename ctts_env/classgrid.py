@@ -339,13 +339,16 @@ class Grid:
                         )
                     )
                     phi0 = np.arctan(tanphi0)
-                    r0 = (
-                        self.r[i, j, k]
-                        * np.sin(phi0) ** 2
-                        / self._st[i, j, k] ** 2
-                        / self._sp[i, j, k] ** 2
-                    )
-                    if r0 >= rmi and r0 <= rmo:
+                    if self._beta == 0:  # avoid 0 division error
+                        r0 = self.r[i, j, k] / self._st[i, j, k] ** 2
+                        ts = np.arcsin(np.sqrt(self.r[i, j, k] / r0))
+                    else:  # non-zero obliquity
+                        r0 = (
+                            self.r[i, j, k]
+                            * np.sin(phi0) ** 2
+                            / self._st[i, j, k] ** 2
+                            / self._sp[i, j, k] ** 2
+                        )
                         ts = np.arcsin(
                             np.sqrt(
                                 self.r[i, j, k]
@@ -354,14 +357,28 @@ class Grid:
                                 / self._sp[i, j, k] ** 2
                             )
                         )
-                        te = np.pi / 2
+                    if r0 >= rmi and r0 <= rmo:
+                        # ts = np.arcsin(
+                        #     np.sqrt(
+                        #         self.r[i, j, k]
+                        #         / r0
+                        #         * np.sin(phi0) ** 2
+                        #         / self._sp[i, j, k] ** 2
+                        #     )
+                        # )
+                        te = np.pi / 2  # * (0.99, 1)[beta == 0]
                         # if self.z[i, j, k] < 0:
                         #     ts = np.pi - ts
                         t_fl = np.linspace(ts, te, N_fl)
 
                         # build the field line the point (i,j,k) belongs to, from the disc to the stellar surface
                         y_fl = np.sin(t_fl) ** 2
-                        r_fl = r0 * self._sp[i, j, k] ** 2 / np.sin(phi0) ** 2 * y_fl
+                        if self._beta == 0:
+                            r_fl = r0 * y_fl
+                        else:  # non-zero obliquity
+                            r_fl = (
+                                r0 * self._sp[i, j, k] ** 2 / np.sin(phi0) ** 2 * y_fl
+                            )
                         v2_fl = (
                             2 * Ggrav * star.M_kg / star.R_m * (1 / r_fl - 1 / r0)
                             + (y_fl * r_fl ** 2 - r0 ** 2)
