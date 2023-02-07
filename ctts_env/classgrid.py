@@ -932,6 +932,8 @@ class Grid:
         show_star=True,
         show_axes=True,
         view=(0, 0),
+        logscale=False,
+        p_scale=0.5,
     ):
         """
         *** Building ***
@@ -963,6 +965,14 @@ class Grid:
         Rmax = self.r[mask].max()
         mask_surf = mask.reshape(-1, self.shape[-1])
         lmag = np.any(self.regions == 1)
+        # smaller array
+        data_to_plot = self.rho[mask]  # self.get_B_module()[mask]
+        # Color scale scaling for the scatter density
+        if logscale:
+            data_to_plot = np.log10(data_to_plot)
+        else:
+            if p_scale > 0:
+                data_to_plot = data_to_plot ** p_scale
 
         zhat = (0, 0, 1)
         xhat = (1, 0, 0)
@@ -1073,7 +1083,7 @@ class Grid:
                 self.x[mask],
                 self.y[mask],
                 self.z[mask],
-                c=self.rho[mask],  # self.get_B_module()[mask],
+                c=data_to_plot,
                 cmap=cmap,
             )
 
