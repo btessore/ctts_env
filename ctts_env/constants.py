@@ -20,6 +20,7 @@ yr_to_sec = 3.154e7  # sec / yr
 Msun_per_year_to_SI = Msun / yr_to_sec  # Msun / 31557600
 day_to_sec = 86400.0  # number of seconds in a day
 Rj_to_Rsun = Rj / Rsun
+Mj_to_Msun = Mj / Msun
 Mj_per_year_to_SI = Mj / yr_to_sec
 
 tiny_val = 1e-50  # prevents division by 0
