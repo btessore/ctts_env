@@ -257,6 +257,7 @@ class Grid:
         verbose :: print info if True
         Tmax    :: value of the temperature maximum in the magnetosphere
         V0      :: value of the velocity at the injection point (m/s)
+        TO DO : include V0 in the density calculation
         """
         self._beta = beta
         ma = np.deg2rad(self._beta)
@@ -314,7 +315,6 @@ class Grid:
         #     + (self.R ** 2 - r0 ** 2) * (star.R_m * star._omega) ** 2
         #     + V0 ** 2
         # )
-
         ##### TMP #####
         # ##self._laccr *= cpp * self.z >= 0
         ###############
@@ -326,6 +326,8 @@ class Grid:
         # might not be resolve leading to unconsistent results
         # like positive while some points are negative
         N_fl = 10000
+        # record the valid values of R0
+        # R0 = np.zeros(self.shape)
         for k in range(self.shape[2]):
             for j in range(self.shape[1]):
                 for i in range(self.shape[0]):
@@ -358,6 +360,7 @@ class Grid:
                             )
                         )
                     if r0 >= rmi and r0 <= rmo:
+                        # R0[i, j, k] = r0
                         # ts = np.arcsin(
                         #     np.sqrt(
                         #         self.r[i, j, k]
@@ -385,6 +388,9 @@ class Grid:
                             * (star.R_m * star._omega) ** 2
                             + V0 ** 2
                         )
+                        # compute invariant # TO DO!
+                        # need B field because need v
+                        # e_minus_lomegastar = self._calc_invariant()
 
                         if np.alltrue(v2_fl > 0):
                             v_square[i, j, k] = (
@@ -433,7 +439,6 @@ class Grid:
         V = np.sqrt(vr * vr + vt * vt + vp * vp)
 
         # Compute the inveriant e - lOmega* (V0 not included!)
-        # for testing -> r0 is not defined beware
         # self._invariant_part1 = 0.5 * (vr * vr + vt * vt + u_phi * u_phi)  # u^2 / 2
         # self._invariant_part2 = (
         #     -Ggrav * star.M_kg / (self.r[self._laccr] * star.R_m)
@@ -442,10 +447,10 @@ class Grid:
         #     -(star.R_m * self.R[self._laccr]) * star._omega * self.v[2, self._laccr]
         # )  # -r u_phi * Omega*
         # self._invariant_part4 = (
-        #     -Ggrav * star.M_kg / (star.R_m * r0[self._laccr])
+        #     -Ggrav * star.M_kg / (star.R_m * R0[self._laccr])
         # )  # -GM/R0
         # self._invariant_part5 = (
-        #     -0.5 * (star.R_m * r0[self._laccr]) ** 2 * star._omega ** 2
+        #     -0.5 * (star.R_m * R0[self._laccr]) ** 2 * star._omega ** 2
         # )  # 1/2 R0^2 * Omega*^2
         # self._invariant = (
         #     self._invariant_part1
@@ -948,6 +953,7 @@ class Grid:
         show_disc=True,
         show_star=True,
         show_axes=True,
+        show_T=False,
         view=(0, 0),
         logscale=False,
         p_scale=0.5,
@@ -983,7 +989,10 @@ class Grid:
         mask_surf = mask.reshape(-1, self.shape[-1])
         lmag = np.any(self.regions == 1)
         # smaller array
-        data_to_plot = self.rho[mask]  # self.get_B_module()[mask]
+        if show_T:
+            data_to_plot = self.T[mask]
+        else:
+            data_to_plot = self.rho[mask]  # self.get_B_module()[mask]
         # Color scale scaling for the scatter density
         if logscale:
             data_to_plot = np.log10(data_to_plot)
@@ -1168,7 +1177,7 @@ class Grid:
         print(" ----------------------- ", file=fout)
         print("Rmax = %lf Rstar" % self.Rmax, file=fout)
         for ir in self.regions_id:
-            # Dont' print transparent and dark regions
+            # Don't print transparent and dark regions at the moment.
             if ir == 0 or ir == -1:
                 continue
             cond = self.regions == ir
