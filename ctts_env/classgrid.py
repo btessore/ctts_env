@@ -257,7 +257,6 @@ class Grid:
         verbose :: print info if True
         Tmax    :: value of the temperature maximum in the magnetosphere
         V0      :: value of the velocity at the injection point (m/s)
-        TO DO : include V0 in the density calculation
         """
         self._beta = beta
         ma = np.deg2rad(self._beta)
@@ -436,7 +435,7 @@ class Grid:
         self.v[0, self._laccr] = vr
         self.v[1, self._laccr] = vt
         self.v[2, self._laccr] = u_phi
-        V = np.sqrt(vr * vr + vt * vt + vp * vp)
+        # v = np.sqrt(vr * vr + vt * vt + vp * vp)
 
         # Compute the inveriant e - lOmega* (V0 not included!)
         # self._invariant_part1 = 0.5 * (vr * vr + vt * vt + u_phi * u_phi)  # u^2 / 2
@@ -463,7 +462,7 @@ class Grid:
         # TO DO: define a non-constant eta
         eta = 1.0  # mass-to-magnetic flux ratio, set numerically
 
-        self.rho[self._laccr] = eta * B[self._laccr] / V
+        self.rho[self._laccr] = eta * B[self._laccr] / v
         # normalisation of the density
         if self.structured:
             # takes values at the stellar surface or at rmin.
@@ -479,7 +478,7 @@ class Grid:
             # with ct = np.diff(self._ct[0],axis=0); dp = np.diff(self.phi[0],axis=1)
             if verbose:
                 print("dOmega = %.4f" % (dOmega))
-                print("mass flux (before norm) = %.4e [v_r B/V]" % mass_flux)
+                print("mass flux (before norm) = %.4e [v_r B/v]" % mass_flux)
             eta = self._Macc / mass_flux / star.R_m ** 2
         else:
             print("Error unstructured grid not yet")
