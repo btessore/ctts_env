@@ -113,6 +113,7 @@ class Grid:
         for nn in self.shape:
             shape.append(nn)
         self.v = np.zeros(shape)
+        self.B = np.zeros(shape)
 
         self.rho = np.zeros(self.shape)
         self.T = np.zeros(self.shape)
@@ -412,25 +413,25 @@ class Grid:
         # m is the magnetic moment at the pole and at r=1.
         # - because vr must be negative around the pole. x2 because _m0 is at the equator.
         m = -2.0 * star._m0 / self.r[self._laccr] ** 3
-        self._B = np.zeros(self.v.shape)
+        self.B = np.zeros(self.v.shape)
         # (Br, Btheta, Bphi)
-        self._B[0, self._laccr] = (
+        self.B[0, self._laccr] = (
             m * (self._st * self._cp * np.sin(ma) + self._ct * np.cos(ma))[self._laccr]
         )
-        self._B[1, self._laccr] = (
+        self.B[1, self._laccr] = (
             -m
             / 2
             * (self._ct * self._cp * np.sin(ma) - self._st * np.cos(ma))[self._laccr]
         )
-        self._B[2, self._laccr] = m / 2 * (self._sp * np.sin(ma))[self._laccr]
+        self.B[2, self._laccr] = m / 2 * (self._sp * np.sin(ma))[self._laccr]
         B = self.get_B_module()
 
         sig_z = self._sign_z[self._laccr]
         v = np.sqrt(v_square[self._laccr])
 
-        vr = v * self._B[0, self._laccr] / B[self._laccr] * sig_z
-        vt = v * self._B[1, self._laccr] / B[self._laccr] * sig_z
-        vp = v * self._B[2, self._laccr] / B[self._laccr] * sig_z
+        vr = v * self.B[0, self._laccr] / B[self._laccr] * sig_z
+        vt = v * self.B[1, self._laccr] / B[self._laccr] * sig_z
+        vp = v * self.B[2, self._laccr] / B[self._laccr] * sig_z
         u_phi = star._veq * self.R[self._laccr] + vp
         self.v[0, self._laccr] = vr
         self.v[1, self._laccr] = vt
@@ -617,8 +618,8 @@ class Grid:
 
         # smaller arrays, only where accretion takes place
         m = star._m0 / self.r[lmag] ** 3  # magnetic moment at r
-        self._B = np.zeros(self.v.shape)
-        self._B[0, lmag] = (
+        self.B = np.zeros(self.v.shape)
+        self.B[0, lmag] = (
             2.0
             * m
             * (
@@ -626,19 +627,19 @@ class Grid:
                 + np.sin(ma) * self._cp[lmag] * self._st[lmag]
             )
         )
-        self._B[1, lmag] = m * (
+        self.B[1, lmag] = m * (
             np.cos(ma) * self._st[lmag] - np.sin(ma) * self._cp[lmag] * self._ct[lmag]
         )
-        self._B[2, lmag] = m * np.sin(ma) * self._sp[lmag]
+        self.B[2, lmag] = m * np.sin(ma) * self._sp[lmag]
         B = self.get_B_module()
 
         sig_z = self._sign_z[lmag]
 
         vpol = star._vff * fact[lmag]
-        vtor = vpol * self._B[2, lmag] / B[lmag]
+        vtor = vpol * self.B[2, lmag] / B[lmag]
 
-        vr = -vpol * self._B[0, lmag] / B[lmag] * sig_z
-        vt = -vpol * self._B[1, lmag] / B[lmag] * sig_z
+        vr = -vpol * self.B[0, lmag] / B[lmag] * sig_z
+        vt = -vpol * self.B[1, lmag] / B[lmag] * sig_z
         self.v[0, lmag] = vr
         self.v[1, lmag] = vt
         self.v[2, lmag] = vtor
@@ -791,7 +792,7 @@ class Grid:
         return
 
     def get_B_module(self):
-        return np.sqrt((self._B ** 2).sum(axis=0))
+        return np.sqrt((self.B ** 2).sum(axis=0))
 
     def get_v_module(self):
         return np.sqrt((self.v ** 2).sum(axis=0))
