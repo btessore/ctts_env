@@ -1225,7 +1225,7 @@ class Grid:
                         "Macc = %.3e Msun/yr" % (self._Macc / Msun_per_year_to_SI),
                         file=fout,
                     )
-                    print("S_shock = %.4f %s" % (self._f_shock, "%"))
+                    print("S_shock = %.4f %s" % (self._f_shock, "%"), file=fout)
                     print("", file=fout)
 
                 print("  --  Extent -- ", file=fout)
