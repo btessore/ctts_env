@@ -3,18 +3,20 @@ import numpy as np
 
 def surface_integral(t, p, q, axi_sym=False):
     """
-    derive the ntegral for points with values q at the surface
+    derive the integral for points with values q at the surface
     of a sphere of radius 1.0.
 
     t :: theta coordinates, 1d array
     p :: phi coordinates, 1d array
 
-    return :: S in units or 1.0 sphere radius squared.
-                  Omega, the total solid angle of the sphere (=1 in unit of 4pi)
+    return ::
+        S           : integral of q over the stellar surface in units of r=1^2
+
+        dOmega/4pi : the total area of the sphere in units of 4pi * 1^2
     """
     ct = np.cos(t)
     S = 0
-    dOmega = 0
+    dOmega_o_4pi = 0
     if axi_sym:
         # 2.5d
         fact = 2 * np.pi
@@ -24,27 +26,27 @@ def surface_integral(t, p, q, axi_sym=False):
         i = 0
         int_theta = 0
         for j in range(1, len(t)):
-            dOmega += abs(ct[j] - ct[j - 1]) / 4 / np.pi
+            dOmega_o_4pi += abs(ct[j] - ct[j - 1]) / 4 / np.pi
             int_theta += 0.5 * (q[j, i] + q[j - 1, i]) * abs(ct[j] - ct[j - 1])
         S = int_theta * fact
-        dOmega *= fact
+        dOmega_o_4pi *= fact
 
-        S *= 1.0 / dOmega
-        return S, dOmega
+        S *= 1.0 / dOmega_o_4pi
+        return S, dOmega_o_4pi
 
     int_phi = 0
     for i in range(len(p)):
         int_theta = 0
         for j in range(1, len(t)):
             if i:
-                dOmega += abs(ct[j] - ct[j - 1]) * (p[i] - p[i - 1]) / 4 / np.pi
+                dOmega_o_4pi += abs(ct[j] - ct[j - 1]) * (p[i] - p[i - 1]) / 4 / np.pi
             int_theta += 0.5 * (q[j, i] + q[j - 1, i]) * abs(ct[j] - ct[j - 1])
         if i:
             S += 0.5 * (int_theta + int_phi) * (p[i] - p[i - 1])
         int_phi = int_theta
 
-    S *= 1.0 / dOmega
-    return S, dOmega
+    S *= 1.0 / dOmega_o_4pi
+    return S, dOmega_o_4pi
 
 
 def spherical_to_cartesian(r, t, p, ct, st, cp, sp):

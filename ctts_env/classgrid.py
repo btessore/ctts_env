@@ -484,6 +484,15 @@ class Grid:
         else:
             print("Error unstructured grid not yet")
         self.rho[self._laccr] *= eta
+        # shock area
+        self._f_shock = surface_integral(
+            self.grid[1], self.grid[2], 1.0 * (rhovr < 0), axi_sym=self._2d
+        )[0] / (4 * np.pi)
+        if verbose:
+            print(
+                "The shock covers a fraction  %.3f %s of the stellar surface"
+                % (self._f_shock * 100, "%")
+            )
 
         # recompute mass flux after normalisation
         mass_flux_check = (
@@ -688,6 +697,9 @@ class Grid:
             print(
                 "WARNING : problem of normalisation of mass flux in self.add_magnetosphere()."
             )
+        self._f_shock = surface_integral(
+            self.grid[1], self.grid[2], 1.0 * (rhovr < 0), axi_sym=self._2d
+        )[0]
 
         # Computes the temperature of the form Lambda_cool = Qheat / nH^2
         Q = B[lmag]
@@ -1213,6 +1225,7 @@ class Grid:
                         "Macc = %.3e Msun/yr" % (self._Macc / Msun_per_year_to_SI),
                         file=fout,
                     )
+                    print("S_shock = %.4f %s" % (self._f_shock, "%"))
                     print("", file=fout)
 
                 print("  --  Extent -- ", file=fout)
