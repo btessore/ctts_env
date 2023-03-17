@@ -75,7 +75,9 @@ class Grid:
         self.structured = r.ndim > 1
 
         self._2d = phi.max() == phi.min()  # only a slice phi = array([0.]*Nr*Nt)
-        # Still, can be 2.5d (z < 0 and z > 0)
+        if self._2d and theta[0, :, 0].max() > np.pi / 2:
+            print("Warning: Nphi = 1 but model is 2.5d !")
+            print(" might have bugs at writing and density normalisation.")
 
         if self.structured:
             self.grid = (r[:, 0, 0], theta[0, :, 0], phi[0, 0, :])
@@ -102,7 +104,6 @@ class Grid:
         self._sp = np.sin(self.phi)  # sin(phi)
         self._st = np.sin(self.theta)  # sin(theta)
         self._ct = np.cos(self.theta)  # cos(theta)
-
         self.x = self.r * self._st * self._cp  # Rstar
         self.y = self.r * self._st * self._sp  # Rstar
         self.z = self.r * self._ct  # Rstar
@@ -163,6 +164,58 @@ class Grid:
         dt = np.gradient(self.theta, axis=1)
         dp = np.gradient(self.phi, axis=2)
         self.surface = self.r ** 2 * self._st * dt * dp
+        return
+
+    def calc_cells_limits(self, rmin, rmax):
+        """
+        From the cell centres (self.r, self.theta, self.phi), computes the cell limits
+        There is one more point in each direction.
+        In 2d symmetry (no 2.5d), sin(theta) limits go from 1 to 0 (pi/2 to 0).
+        in 3d, sin(theta) limits go from 1 to -1.
+        """
+
+        if self.shape[-1] > 1:
+            self._p_lim = np.zeros(self.shape[-1] + 1)
+        else:
+            self._p_lim = np.zeros(1)
+        self._r_lim = np.zeros(self.shape[0] + 1)
+        jend = (self.shape[1] // 2, self.shape[1])[self._2d]
+        self._sint_lim = np.zeros(self.shape[1] + 1) - 1000  # debug
+
+        self._p_lim[-1] = 2 * np.pi
+        self._p_lim[0] = 0.0
+
+        self._r_lim[0] = rmin
+        for i in range(1, self.shape[0]):
+            # self._r_lim[i] = 0.5 * (self.r[i,0,0]+self.r[i-1,0,0])
+            dr = self.r[i, 0, 0] - self.r[i - 1, 0, 0]
+            self._r_lim[i] = self._r_lim[i - 1] + dr
+        self._r_lim[self.shape[0]] = rmax
+
+        # w = self._st[0, :, 0]
+        # because theta goes to pi to 0 in general for that grid but it is
+        # preferable for the limits in mcfost to have it from 1 to -1 so pi/2 to pi/2
+        # Still, theta goes from pi to 0.
+        w = np.sin(self.theta[0, :, 0] - (np.pi / 2, 0)[self._2d])  # [1, -1]
+        self._sint_lim[0] = 1.0
+        for j in range(1, jend):
+            self._sint_lim[j] = 0.5 * (w[j] + w[j - 1])
+            # dt = w[j] - w[j - 1]
+            # self._sint_lim[j] = self._sint_lim[j - 1] + dt
+        # print("0", self._sint_lim)
+        self._sint_lim[jend] = 0
+        # print("1", self._sint_lim)
+        if not self._2d:
+            self._sint_lim[jend + 1 :] = -self._sint_lim[0:jend][::-1]
+
+        cost_lim = np.sqrt(1.0 - self._sint_lim ** 2)
+        self._tlim = np.arcsin(self._sint_lim)  # [pi/2, -pi/2] in 3d
+        # print("2", self._sint_lim)
+
+        for k in range(1, self.shape[2]):
+            self._p_lim[k] = 0.5 * (self.phi[0, 0, k] + self.phi[0, 0, k - 1])
+            # dp = self.phi[0, 0, k] - self.phi[0, 0, k - 1]
+            # self._p_lim[k] = self._p_lim[k - 1] + dp
         return
 
     def _check_overlap(self):
@@ -850,10 +903,99 @@ class Grid:
         Thp=0,
         Tpre_shock=9000.0,
         laccretion=True,
-        Voronoi=False,
-        mask=[],
+        rlim_au=[0, 1000],
     ):
         """
+
+        This method writes the Grid() instance to a binary file, to be used
+        by the RT code MCFOST.
+
+        Velocity field in spherical coordinates.
+
+        """
+
+        self.calc_cells_limits(rlim_au[0], rlim_au[1])
+
+        print("r limits:")
+        print(self._r_lim[0], self._r_lim[-1])
+        print("r min/max ():", self.r.min(), self.r.max())
+        print("theta limits:")
+        print(np.rad2deg(self._tlim[0]), np.rad2deg(self._tlim[-1]))
+        print("theta min/max:")
+        print(
+            np.rad2deg(self.theta[0, :, 0].min()), np.rad2deg(self.theta[0, :, 0].max())
+        )
+        print("phi limits:")
+        print(np.rad2deg(self._p_lim[0]), np.rad2deg(self._p_lim[-1]))
+        print("phi max/min:")
+        print(np.rad2deg(self.phi[0, 0, :].min()), np.rad2deg(self.phi[0, 0, :].max()))
+
+        from scipy.io import FortranFile
+
+        f = FortranFile(filename, "w")
+        # order = "F"
+
+        # beware write
+        # f.write_record(self.shape[0])
+        # f.write_record(self._rlim)  # in au
+        # f.write_record(self.shape[1])
+        # f.write_record(self._tlim)
+        # f.write_record(self.shape[2])
+        # f.write_record(self._plim)
+        # # cell centres
+        # f.write_record(np.single(self.r[:, 0, 0]))
+        # f.write_record(np.single(self.theta[0, :, 0]))
+        # f.write_record(np.single(self.phi[0, 0, :]))
+
+        # write sizes along each direction + limits (size + 1)
+        f.write_record(self.shape[0])
+        f.write_record(np.single(self._r_lim))
+        f.write_record(self.shape[1])
+        f.write_record(np.single(self._sint_lim))
+        f.write_record(self.shape[2])
+        f.write_record(np.single(self._p_lim))
+
+        f.write_record((0, 1)[laccretion])
+        f.write_record(float(Thp))
+        f.write_record(float(Tpre_shock))
+
+        f.write_record(self.T[:, :, :].T)  # .flatten(order=order))
+        f.write_record(self.rho[:, :, :].T)  # .flatten(order=order))
+        f.write_record(self.ne[:, :, :].T)  # .flatten(order=order))
+        v3d = np.zeros((3, self.shape[2], self.shape[1], self.shape[0]))
+        v3d[0] = self.v[
+            0, :, :, :
+        ].T  # .flatten(order=order)  # vfield3d(:,1) = vx, vr, vR
+        v3d[1] = self.v[
+            2, :, :, :
+        ].T  # .flatten(order=order)  # vfield3d(:,2) = vy, vphi
+        v3d[2] = self.v[
+            1, :, :, :
+        ].T  # .flatten(order=order)  # vfield3d(:,3) = vz, vtheta
+        # float 32 for real and float for double precision kind=dp
+        f.write_record(np.float32(v3d))
+        # vturb -> 0
+        f.write_record(np.zeros(np.product(self.shape)))
+        #
+        dz = np.copy(self.regions[:, :, :])  # .flatten(order=order))
+        dz[dz > 0] = 1
+        f.write_record(np.intc(dz.T))
+        f.close()
+        return
+
+    def _write_deprec_ascii(
+        self,
+        filename,
+        Thp=0,
+        Tpre_shock=9000.0,
+        laccretion=True,
+        Voronoi=False,
+        mask=[],
+        vcoord=2,
+    ):
+        """
+        ** Deprecated ASCII version **
+        ** Still works for Voronoi-MHD files at the moment **
 
         This method writes the Grid() instance to an ascii file, to be used
         by the RT code MCFOST.
@@ -879,8 +1021,14 @@ class Grid:
             if ~np.any(mask):
                 mask = [True] * self.Ncells
         else:
-            vfield_coord = 2
-            v1, v2, v3 = self.get_v_cyl()
+            vfield_coord = vcoord
+            if vfield_coord == 2:
+                v1, v2, v3 = self.get_v_cyl()
+            elif vfield_coord == 3:
+                v1, v2, v3 = self.v
+            else:
+                print("Error vfield_coord %d not allowed ! " % vfield_coord)
+                exit()
             x1 = self.R.flatten()
             x2 = self.z.flatten()
             x3 = self.phi.flatten()
