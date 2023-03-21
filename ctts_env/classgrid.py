@@ -947,6 +947,13 @@ class Grid:
         R_core = interpzFunc_in(np.abs(self.z) * star.R_au)
         R_jet = interpzFunc_out(np.abs(self.z) * star.R_au)
 
+
+        sub_alfvenic_R=labeled_data["r/r_0"][288]*self.R*star.R_au
+        sub_alfvenic_z=labeled_data["y"][288]*sub_alfvenic_R*star.R_au
+
+
+        sub_alfvenic=np.less_equal(np.abs(self.z)*star.R_au,np.abs(sub_alfvenic_z))
+
         quantity = "n_MHD"
         interpValFunc = CubicSpline(labeled_data["y"], labeled_data[quantity])
         values_interp = interpValFunc(y)
@@ -957,7 +964,7 @@ class Grid:
         result = A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
         less_than = np.less_equal(self.R * star.R_au, R_core)
         greater_than = np.greater_equal(self.R * star.R_au, R_jet)
-        inside_range = np.logical_or(less_than, greater_than)
+        inside_range = np.logical_or((np.logical_or(less_than,greater_than)),sub_alfvenic)
         mask = np.ma.masked_where(inside_range, result)
         mask = np.ma.filled(mask, 0)
         mask = mask > 0
