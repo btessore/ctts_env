@@ -5,10 +5,12 @@ from .constants import (
     Msun_per_year_to_SI,
     day_to_sec,
     Rsun_au,
+    AMU,
 )
-from .utils import surface_integral, spherical_to_cartesian
+from .utils import surface_integral, spherical_to_cartesian, cartesian_to_spherical
 from .temperature import logRadLoss_to_T, T_to_logRadLoss
 import numpy as np
+from scipy.interpolate import CubicSpline
 import sys
 
 # import matplotlib.pyplot as plt
@@ -895,6 +897,143 @@ class Grid:
         self.rho[mask] *= 0
         self.T[mask] *= 0
         self.Rmax = 0
+        return
+
+    def add_disc_wind(
+        self, star, Rin=5, Rout=10, Macc=1e-8, Tmax=10000.0, wind_model="sol40.dat"
+    ):
+
+        self._Rwind_in = Rin * star.R_m
+        self._Rwind_out = Rout * star.R_m
+
+        Macc_SI = Macc * Msun_per_year_to_SI
+
+        fw = open(wind_model, "r")
+        fw.readline()
+        xi = float(fw.readline().strip().split()[1])
+        fw.close()
+
+        quant = [
+            "y",
+            "theta",
+            "r/r_0",
+            "n_MHD",
+            "u_r",
+            "u_phi",
+            "u_z",
+            "T_MHD",
+            "B_r",
+            "B_phi",
+            "B_z",
+            "T_dyn",
+        ]
+
+        pure_data = np.transpose(
+            np.genfromtxt(wind_model, skip_header=17, dtype="float")
+        )
+        labeled_data = {quant[n]: pure_data[n, :] for n in range(len(pure_data[:, 0]))}
+
+        interpzFunc_in = CubicSpline(
+            labeled_data["y"] * labeled_data["r/r_0"] * Rin * star.R_au,
+            labeled_data["r/r_0"] * Rin * star.R_au,
+        )
+        interpzFunc_out = CubicSpline(
+            labeled_data["y"] * labeled_data["r/r_0"] * Rout * star.R_au,
+            labeled_data["r/r_0"] * Rout * star.R_au,
+        )
+
+        y = np.abs(np.divide(self.z, self.R))
+
+        R_core = interpzFunc_in(np.abs(self.z) * star.R_au)
+        R_jet = interpzFunc_out(np.abs(self.z) * star.R_au)
+
+        quantity = "n_MHD"
+        interpValFunc = CubicSpline(labeled_data["y"], labeled_data[quantity])
+        values_interp = interpValFunc(y)
+
+        A = Macc / np.sqrt(star.M)
+        beta = -3 / 2 + xi
+
+        result = A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
+        less_than = np.less_equal(self.R * star.R_au, R_core)
+        greater_than = np.greater_equal(self.R * star.R_au, R_jet)
+        inside_range = np.logical_or(less_than, greater_than)
+        mask = np.ma.masked_where(inside_range, result)
+        mask = np.ma.filled(mask, 0)
+        mask = mask > 0
+
+        self.regions[mask] = 2
+
+        self.rho[mask] = result[mask] * 1e6 * AMU  # kg/m3
+        self.T[mask] = Tmax
+
+        quantity = "u_r"
+        interpValFunc = CubicSpline(labeled_data["y"], labeled_data[quantity])
+        values_interp = interpValFunc(y)
+
+        A = np.sqrt(star.M) * 1e3
+        beta = -1 / 2
+
+        vR = A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
+
+        quantity = "u_z"
+        interpValFunc = CubicSpline(labeled_data["y"], labeled_data[quantity])
+        values_interp = interpValFunc(y)
+
+        vz = self._sign_z * A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
+
+        quantity = "u_phi"
+        interpValFunc = CubicSpline(labeled_data["y"], labeled_data[quantity])
+        values_interp = interpValFunc(y)
+
+        vp = A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
+
+        # we use spherical coordinates so convert to cartesian ...
+        vx = self._cp[mask] * vR[mask] - self._sp[mask] * vp[mask]
+        vy = self._sp[mask] * vR[mask] + self._cp[mask] * vp[mask]
+
+        # ... then to spherical ...
+        self.v[0, mask], self.v[1, mask], self.v[2, mask] = cartesian_to_spherical(
+            vx,
+            vy,
+            vz[mask],
+            self._ct[mask],
+            self._st[mask],
+            self._cp[mask],
+            self._sp[mask],
+        )
+
+        # ... then check that the cylindrical obtained are correct
+        vR_check, vz_check, vp_check = self.get_v_cyl()
+
+        print(
+            "diff(vR):", np.max(abs((vR_check[mask] - vR[mask]) / (1e-100 + vR[mask])))
+        )
+        print("diff(vz):", np.max(abs(vz_check[mask] - vz[mask]) / (1e-100 + vz[mask])))
+        print("diff(vp):", np.max(abs(vp_check[mask] - vp[mask]) / (1e-100 + vp[mask])))
+
+        A = np.sqrt(Macc * np.sqrt(star.M))
+        beta = -5 / 4 + xi / 2
+        quantity = "B_r"
+        interpValFunc = CubicSpline(labeled_data["y"], labeled_data[quantity])
+        values_interp = interpValFunc(y)
+        BR = A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
+        quantity = "B_z"
+        interpValFunc = CubicSpline(labeled_data["y"], labeled_data[quantity])
+        values_interp = interpValFunc(y)
+        Bz = A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
+        quantity = "B_phi"
+        interpValFunc = CubicSpline(labeled_data["y"], labeled_data[quantity])
+        values_interp = interpValFunc(y)
+        Bphi = A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
+        B = np.sqrt(BR ** 2 + Bz ** 2 + Bphi ** 2)
+
+        Q = B[mask]
+        rl = Q * self.rho[mask] ** -2
+        lgLambda = np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax)
+        self.T[mask] = logRadLoss_to_T(lgLambda)
+        self.regions[mask][self.T[mask] < 2000] = -1
+
         return
 
     def _write(
