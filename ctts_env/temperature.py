@@ -35,7 +35,7 @@ def T_to_logRadLoss(x):
     return logL(np.log10(x))
 
 
-def logRadLoss_to_T(x, extrapolate_up=False):
+def logRadLoss_to_T(x, extrapolate_up=False, T_low_limit=1500):
     """
     Return the temperature from x, the radiative loss function.
     Range of values returned depends on the tables (tab_logT,tab_logRadLoss),
@@ -54,65 +54,65 @@ def logRadLoss_to_T(x, extrapolate_up=False):
     else:
         tmp[x >= tab_logRadLoss[0]] = 10 ** logT_bound(x[x >= tab_logRadLoss[0]])
 
-    return tmp
+    return np.maximum(tmp, T_low_limit)
 
 
-def compute_temp(r, rho, Tmax, B=0, type=0, Tmax_sec=0, mcol=[]):
-    """
-    r, rho must have the same shape
+# def compute_temp(r, rho, Tmax, B=0, type=0, Tmax_sec=0, mcol=[]):
+#     """
+#     r, rho must have the same shape
 
-    TO DO: fortran wrapper
+#     TO DO: fortran wrapper
 
-    NOTE: works only with analytical magnetospheric models.
-    """
-    #
-    mask = rho > 0
-    T = np.zeros(r.shape)
+#     NOTE: works only with analytical magnetospheric models.
+#     """
+#     #
+#     mask = rho > 0
+#     T = np.zeros(r.shape)
 
-    if type == 1:  # normalize Hartmann to avg = Tmax
-        rl = r[mask] ** -3 * rho[mask] ** -2
-        T[mask] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
-        Tavg = np.average(T[mask], weights=rho[mask])
-        T *= Tmax / Tavg
+#     if type == 1:  # normalize Hartmann to avg = Tmax
+#         rl = r[mask] ** -3 * rho[mask] ** -2
+#         T[mask] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
+#         Tavg = np.average(T[mask], weights=rho[mask])
+#         T *= Tmax / Tavg
 
-    elif type == 2:  # type==0 with B
-        if B.shape != rho.shape:
-            print("compute_temp error: B is required with type==2")
-        rl = B[mask] * rho[mask] ** -2
-        T[mask] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
+#     elif type == 2:  # type==0 with B
+#         if B.shape != rho.shape:
+#             print("compute_temp error: B is required with type==2")
+#         rl = B[mask] * rho[mask] ** -2
+#         T[mask] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
 
-    elif type == 3:  # type==1 with B
-        if B.shape != rho.shape:
-            print("compute_temp error: B is required with type==2")
-        rl = B[mask] * rho[mask] ** -2
-        T[mask] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
-        Tavg = np.average(T[mask], weights=rho[mask])
-        T *= Tmax / Tavg
+#     elif type == 3:  # type==1 with B
+#         if B.shape != rho.shape:
+#             print("compute_temp error: B is required with type==2")
+#         rl = B[mask] * rho[mask] ** -2
+#         T[mask] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
+#         Tavg = np.average(T[mask], weights=rho[mask])
+#         T *= Tmax / Tavg
 
-    elif type == 4:  # hartmann with independent normalisation for secondary column
-        if not Tmax_sec:
-            Tmax_sec = Tmax  # same Tmax
-        main_col = mcol
-        sec_col = ~mcol
-        rl = r[main_col] ** -3 * rho[main_col] ** -2
-        T[main_col] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
-        rl = r[sec_col] ** -3 * rho[sec_col] ** -2
-        T[sec_col] = logRadLoss_to_T(
-            np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax_sec)
-        )
-    elif type == 5:  # type 4 with B
-        if not Tmax_sec:
-            Tmax_sec = Tmax  # same Tmax
-        main_col = mcol * mask
-        sec_col = ~mcol * mask
-        rl = B[main_col] * rho[main_col] ** -2
-        T[main_col] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
-        rl = B[sec_col] * rho[sec_col] ** -2
-        T[sec_col] = logRadLoss_to_T(
-            np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax_sec)
-        )
-    else:  # Classic Hartmann for axisymmetric models
-        rl = r[mask] ** -3 * rho[mask] ** -2
-        T[mask] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
+#     elif type == 4:  # hartmann with independent normalisation for secondary column
+#         if not Tmax_sec:
+#             Tmax_sec = Tmax  # same Tmax
+#         main_col = mcol
+#         sec_col = ~mcol
+#         rl = r[main_col] ** -3 * rho[main_col] ** -2
+#         T[main_col] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
+#         rl = r[sec_col] ** -3 * rho[sec_col] ** -2
+#         T[sec_col] = logRadLoss_to_T(
+#             np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax_sec)
+#         )
+#     elif type == 5:  # type 4 with B
+#         if not Tmax_sec:
+#             Tmax_sec = Tmax  # same Tmax
+#         main_col = mcol * mask
+#         sec_col = ~mcol * mask
+#         rl = B[main_col] * rho[main_col] ** -2
+#         T[main_col] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
+#         rl = B[sec_col] * rho[sec_col] ** -2
+#         T[sec_col] = logRadLoss_to_T(
+#             np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax_sec)
+#         )
+#     else:  # Classic Hartmann for axisymmetric models
+#         rl = r[mask] ** -3 * rho[mask] ** -2
+#         T[mask] = logRadLoss_to_T(np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax))
 
-    return T
+#     return T
