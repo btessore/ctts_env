@@ -787,6 +787,7 @@ class Grid:
         beta=0.5,
         fesc=2,
         Tmax=10000,
+        z_limit=0,
     ):
         """
         Mloss :: mass ejection rate in Msun/yr
@@ -797,10 +798,13 @@ class Grid:
         beta :: exponent of the radial velocity of the wind (acceleration parameter)
         fesc :: terminal velocity of the disc wind in unit of the escape velocity
         Tmax    :: Temperature max of the disc wind
+        z_limit :: the wind starts at abs(z) > z_limit (default 0 == midplane)
         """
-        ldw = (self.R >= Rin * (abs(self.z) + zs) / zs) * (
-            self.R <= Rout * (abs(self.z) + zs) / zs
-        )
+        ldw = (
+            (self.R >= Rin * (abs(self.z) + zs) / zs)
+            * (self.R <= Rout * (abs(self.z) + zs) / zs)
+            * (abs(self.z) >= z_limit)
+        )  #            * (abs(self.z) / self.R >= z_limit)
         self.regions[ldw] = 2
 
         p_ml = (
