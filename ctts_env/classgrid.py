@@ -904,7 +904,14 @@ class Grid:
         return
 
     def add_disc_wind(
-        self, star, Rin=5, Rout=10, Macc=1e-8, Tmax=10000.0, wind_model="sol40.dat"
+        self,
+        star,
+        Rin=5,
+        Rout=10,
+        Macc=1e-8,
+        Tmax=10000.0,
+        wind_model="sol40.dat",
+        z_limit=0,
     ):
 
         self._Rwind_in = Rin * star.R_m
@@ -971,7 +978,7 @@ class Grid:
         )
         mask = np.ma.masked_where(inside_range, result)
         mask = np.ma.filled(mask, 0)
-        mask = (mask > 0) * ~sub_alfvenic
+        mask = (mask > 0) * ~sub_alfvenic * (abs(self.z) > z_limit)
 
         print(sub_alfvenic.max())
         self.regions[sub_alfvenic] = -1
