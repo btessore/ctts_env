@@ -234,7 +234,7 @@ class Grid:
         """
         return
 
-    def add_dark_disc(self, Rin, dwidth=0, Td=0, wall=False, phi0=0, Rwi=1, Aw=1):
+    def add_dark_disc(self, Rin, dwidth=0, Td=0, wall=False, phi0=0, Rwi=1, Aw=1, Tw=0):
         """
         Optically thick and ultra-cool disc.
         rho value does not matter (dark). Temperature
@@ -247,6 +247,7 @@ class Grid:
         phi0    :: origin of the wall in the azimuthal plane (max at phi0)
         Rwi :: inner radius of the wall (where it starts)
         Aw  :: width of the wall (in the z direction)
+        Td  :: (constant) Temperature of the wall
         """
         # zmin = dwidth + np.amin(abs(self.z), axis=(1, 2))
         # mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, None])
@@ -266,14 +267,11 @@ class Grid:
             )
             north = (1.0 + np.cos(self.phi + phi0)) / 2.0
             sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
-            mask = (
-                (self.R > Rwi)
-                * (self.R <= Rwi + dwall)
-                * (
-                    (self.z <= zmin[:, None, :] + Aw * north) * (self.z >= 0)
-                    | (self.z >= -zmin[:, None, :] - Aw * sud) * (self.z < 0)
-                )
-            )
+            wall_mask = (self.R <= Rwi + dwall) * (
+                self.z <= zmin[:, None, :] + Aw * north
+            ) * (self.z >= 0) | (self.z >= -zmin[:, None, :] - Aw * sud) * (self.z < 0)
+            mask = (self.R > Rwi) * wall_mask
+            self.T[wall_mask] = Tw
             # wall following accretion column building
             # zmax = Aw
             # rmax = np.sqrt(Aw ** 2 + self.R[self._lmag].max() ** 2)
