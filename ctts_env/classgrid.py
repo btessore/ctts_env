@@ -124,8 +124,8 @@ class Grid:
         self.Rmax = 0
 
         self.regions = np.zeros(self.shape, dtype=int)
-        self.regions_label = ["", "Accr. Col", "Disc Wind", "Disc", "dark"]
-        self.regions_id = [0, 1, 2, 3, -1]
+        self.regions_label = ["", "Accr. Col", "Disc Wind", "Disc", "Dead zone", "dark"]
+        self.regions_id = [0, 1, 2, 3, 4, -1]
         # 0 : transparent
         # -1: dark
         # 1 : accretion columns
@@ -286,6 +286,39 @@ class Grid:
             self.rho[mask] = 1e-5
         return
 
+    def setup_dead_zone(self, star, rho, T):
+        """
+        ** building **
+        The density and the temperature are assumed to be
+        constant and given by rho and T, respectively.
+
+        """
+        try:
+            b = np.deg2rad(self._beta)
+        except:
+            print("Cannot add a dead zone if no accreting magnetosphere present!")
+            exit()
+            return
+
+        ldz = self._ldead_zone > 0
+        v = np.sqrt(self._v2_dead_zone[ldz])
+        sig_z = self._sign_z[ldz]
+
+        m = -2.0 * star._m0 / self.r[ldz] ** 3
+        br = m * (self._st * self._cp * np.sin(b) + self._ct * np.cos(b))[ldz]
+        bt = -m / 2 * (self._ct * self._cp * np.sin(b) - self._st * np.cos(b))[ldz]
+        bphi = m / 2 * (self._sp * np.sin(b))[ldz]
+        Bmag = np.sqrt(br**2 + bt**2 + bphi**2)
+        self.v[0, ldz] = v * br / Bmag * sig_z
+        self.v[1, ldz] = v * bt / Bmag * sig_z
+        self.v[2, ldz] = v * bphi / Bmag * sig_z + star._veq * self.R[ldz]
+
+        self.regions[ldz] = 4
+        self.rho[ldz] = rho
+        self.T[ldz] = T
+
+        return
+
     def add_mag(
         self,
         star,
@@ -371,6 +404,7 @@ class Grid:
         # ##self._laccr *= cpp * self.z >= 0
         ###############
         self._ldead_zone = np.zeros(self.shape)
+        self._v2_dead_zone = np.zeros(self.shape)
         # to test
         # check the points for which the field line passing by these points accrete
         v_square = np.zeros(self.shape)
@@ -457,6 +491,16 @@ class Grid:
                             )
                     elif r0 < rmi:
                         self._ldead_zone[i, j, k] = 1
+                        self._v2_dead_zone[i, j, k] = abs(
+                            2
+                            * Ggrav
+                            * star.M_kg
+                            / star.R_m
+                            * (1 / self.r[i, j, k] - 1 / r0)
+                            + (self.R[i, j, k] ** 2 - r0**2)
+                            * (star.R_m * star._omega) ** 2
+                            + V0**2
+                        )
         #############################################################################
 
         # ###self._laccr = (v_square >= 0) * (r0 >= rmi) * (r0 <= rmo)
@@ -1512,24 +1556,24 @@ class Grid:
                 # Info. specific to a regions, existing only if the proper method has been called.
                 if ir == 1:
                     print(
-                        "rmi = %lf Rstar; rmo = %lf Rstar"
+                        "   rmi = %lf Rstar; rmo = %lf Rstar"
                         % (self._Rt, self._Rt + self._dr),
                         file=fout,
                     )
                     # with new mag, there is no main/sec columns
                     try:  # tmp
                         print(
-                            "no sec. columns ? %s" % ("No", "Yes")[self._no_sec],
+                            "   no sec. columns ? %s" % ("No", "Yes")[self._no_sec],
                             file=fout,
                         )
                     except:
                         pass
-                    print("beta_ma = %lf deg" % self._beta, file=fout)
+                    print("   beta_ma = %lf deg" % self._beta, file=fout)
                     print(
-                        "Macc = %.3e Msun/yr" % (self._Macc / Msun_per_year_to_SI),
+                        "   Macc = %.3e Msun/yr" % (self._Macc / Msun_per_year_to_SI),
                         file=fout,
                     )
-                    print("S_shock = %.4f %s" % (self._f_shock, "%"), file=fout)
+                    print("   S_shock = %.4f %s" % (self._f_shock, "%"), file=fout)
                     print("", file=fout)
 
                 print("  --  Extent -- ", file=fout)
