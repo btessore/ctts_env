@@ -292,6 +292,8 @@ class Grid:
         The density and the temperature are assumed to be
         constant and given by rho and T, respectively.
 
+        The dead zone is in solid body rotation only.
+
         """
         try:
             b = np.deg2rad(self._beta)
@@ -301,17 +303,17 @@ class Grid:
             return
 
         ldz = self._ldead_zone > 0
-        v = np.sqrt(self._v2_dead_zone[ldz])
-        sig_z = self._sign_z[ldz]
-
-        m = -2.0 * star._m0 / self.r[ldz] ** 3
-        br = m * (self._st * self._cp * np.sin(b) + self._ct * np.cos(b))[ldz]
-        bt = -m / 2 * (self._ct * self._cp * np.sin(b) - self._st * np.cos(b))[ldz]
-        bphi = m / 2 * (self._sp * np.sin(b))[ldz]
-        Bmag = np.sqrt(br**2 + bt**2 + bphi**2)
-        self.v[0, ldz] = v * br / Bmag * sig_z
-        self.v[1, ldz] = v * bt / Bmag * sig_z
-        self.v[2, ldz] = v * bphi / Bmag * sig_z + star._veq * self.R[ldz]
+        # v = np.sqrt(self._v2_dead_zone[ldz])
+        # sig_z = self._sign_z[ldz]
+        # m = -2.0 * star._m0 / self.r[ldz] ** 3
+        # br = m * (self._st * self._cp * np.sin(b) + self._ct * np.cos(b))[ldz]
+        # bt = -m / 2 * (self._ct * self._cp * np.sin(b) - self._st * np.cos(b))[ldz]
+        # bphi = m / 2 * (self._sp * np.sin(b))[ldz]
+        # Bmag = np.sqrt(br**2 + bt**2 + bphi**2)
+        # self.v[0, ldz] = v * br / Bmag * sig_z
+        # self.v[1, ldz] = v * bt / Bmag * sig_z
+        # self.v[2, ldz] = v * bphi / Bmag * sig_z + star._veq * self.R[ldz]
+        self.v[2, ldz] = star._veq * self.R[ldz]
 
         self.regions[ldz] = 4
         self.rho[ldz] = rho
