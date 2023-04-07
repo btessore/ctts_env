@@ -31,14 +31,14 @@ class Star:
         self.R_au = self.R * Rsun_au
         self.M_kg = self.M * Msun
         self._m0 = self.Beq * 1.0
-        self.S_m2 = 4 * np.pi * self.R_m**2
+        self.S_m2 = 4 * np.pi * self.R_m ** 2
         self.Rco = 100  # large init value
 
         self._vff = np.sqrt(self.M_kg * Ggrav * 2.0 / self.R_m)
         if self.P:
             self._veq = 2.0 * np.pi / (self.P * day_to_sec) * self.R_m
             self._omega = 2 * np.pi / (self.P * day_to_sec)
-            self.Rco = (Ggrav * self.M_kg / self._omega**2) ** (
+            self.Rco = (Ggrav * self.M_kg / self._omega ** 2) ** (
                 1 / 3
             ) / self.R_m  # Rstar
         else:
@@ -124,8 +124,16 @@ class Grid:
         self.Rmax = 0
 
         self.regions = np.zeros(self.shape, dtype=int)
-        self.regions_label = ["", "Accr. Col", "Disc Wind", "Disc", "Dead zone", "dark"]
-        self.regions_id = [0, 1, 2, 3, 4, -1]
+        self.regions_label = [
+            "",
+            "Accr. Col",
+            "Disc Wind",
+            "Disc",
+            "Dead zone",
+            "Stellar wind",
+            "dark",
+        ]
+        self.regions_id = [0, 1, 2, 3, 4, 5, -1]
         # 0 : transparent
         # -1: dark
         # 1 : accretion columns
@@ -152,7 +160,7 @@ class Grid:
             dr = np.gradient(self.r, axis=0)
             dt = np.gradient(self.theta, axis=1)
             dp = np.gradient(self.phi, axis=2)
-            self.volume = self.r**2 * dr * self._st * dt * dp
+            self.volume = self.r ** 2 * dr * self._st * dt * dp
 
         self._smoothing_length = 1 / 3 * self.volume ** (1 / 3)
         self._volume_set = True
@@ -164,7 +172,7 @@ class Grid:
         """
         dt = np.gradient(self.theta, axis=1)
         dp = np.gradient(self.phi, axis=2)
-        self.surface = self.r**2 * self._st * dt * dp
+        self.surface = self.r ** 2 * self._st * dt * dp
         return
 
     def calc_cells_limits(self, rmin, rmax):
@@ -209,7 +217,7 @@ class Grid:
         if not self._2d:
             self._sint_lim[jend + 1 :] = -self._sint_lim[0:jend][::-1]
 
-        cost_lim = np.sqrt(1.0 - self._sint_lim**2)
+        cost_lim = np.sqrt(1.0 - self._sint_lim ** 2)
         self._tlim = np.arcsin(self._sint_lim)  # [pi/2, -pi/2] in 3d
         # print("2", self._sint_lim)
 
@@ -372,7 +380,7 @@ class Grid:
         self._xp = self.r * (self._cp * self._st * np.cos(ma) - self._ct * np.sin(ma))
         self._yp = self.r * (self._sp * self._st)
         self._zp = self.r * (self._cp * self._st * np.sin(ma) + self._ct * np.cos(ma))
-        Rp = np.sqrt(self._xp**2 + self._yp**2)
+        Rp = np.sqrt(self._xp ** 2 + self._yp ** 2)
 
         cpp = self._xp / Rp
         spp = self._yp / Rp
@@ -472,9 +480,9 @@ class Grid:
                             )
                         v2_fl = (
                             2 * Ggrav * star.M_kg / star.R_m * (1 / r_fl - 1 / r0)
-                            + (y_fl * r_fl**2 - r0**2)
+                            + (y_fl * r_fl ** 2 - r0 ** 2)
                             * (star.R_m * star._omega) ** 2
-                            + V0**2
+                            + V0 ** 2
                         )
                         # compute invariant # TO DO!
                         # need B field because need v
@@ -487,9 +495,9 @@ class Grid:
                                 * star.M_kg
                                 / star.R_m
                                 * (1 / self.r[i, j, k] - 1 / r0)
-                                + (self.R[i, j, k] ** 2 - r0**2)
+                                + (self.R[i, j, k] ** 2 - r0 ** 2)
                                 * (star.R_m * star._omega) ** 2
-                                + V0**2
+                                + V0 ** 2
                             )
                     elif r0 < rmi:
                         self._ldead_zone[i, j, k] = 1
@@ -499,9 +507,9 @@ class Grid:
                             * star.M_kg
                             / star.R_m
                             * (1 / self.r[i, j, k] - 1 / r0)
-                            + (self.R[i, j, k] ** 2 - r0**2)
+                            + (self.R[i, j, k] ** 2 - r0 ** 2)
                             * (star.R_m * star._omega) ** 2
-                            + V0**2
+                            + V0 ** 2
                         )
         #############################################################################
 
@@ -580,7 +588,7 @@ class Grid:
             if verbose:
                 print("dOmega = %.4f" % (dOmega))
                 print("mass flux (before norm) = %.4e [v_r B/v]" % mass_flux)
-            eta = self._Macc / mass_flux / star.R_m**2
+            eta = self._Macc / mass_flux / star.R_m ** 2
         else:
             print("Error unstructured grid not yet")
         self.rho[self._laccr] *= eta
@@ -599,7 +607,7 @@ class Grid:
             surface_integral(
                 self.grid[1], self.grid[2], -rhovr * eta, axi_sym=self._2d
             )[0]
-            * star.R_m**2
+            * star.R_m ** 2
         )
         if verbose:
             print(
@@ -675,17 +683,17 @@ class Grid:
         self._xp = self.r * (self._cp * self._st * np.cos(ma) - self._ct * np.sin(ma))
         self._yp = self.r * (self._sp * self._st)
         self._zp = self.r * (self._cp * self._st * np.sin(ma) + self._ct * np.cos(ma))
-        Rp = np.sqrt(self._xp**2 + self._yp**2)  # + tiny_val
+        Rp = np.sqrt(self._xp ** 2 + self._yp ** 2)  # + tiny_val
 
         cpp = self._xp / Rp
         spp = self._yp / Rp
         ctp = self._zp / self.r
         stp = Rp / self.r  # np.sqrt(1.0 - ctp ** 2)
 
-        sintheta0p_sq = (1.0 + np.tan(ma) ** 2 * cpp**2) ** -1  # sin(theta0')**2
-        yp = stp**2
+        sintheta0p_sq = (1.0 + np.tan(ma) ** 2 * cpp ** 2) ** -1  # sin(theta0')**2
+        yp = stp ** 2
         # In the Frame of the disc (i.e., not tilted)
-        y = self._st**2  # Note: y is 0 if theta = 0 +- pi
+        y = self._st ** 2  # Note: y is 0 if theta = 0 +- pi
         dtheta = self.grid[1][1] - self.grid[1][0]
         y[self.theta % np.pi == 0.0] = np.sin(dtheta) ** 2
         rM = self.r / y
@@ -770,7 +778,7 @@ class Grid:
             if verbose:
                 print("dOmega = %.4f" % (dOmega))
                 print("mass flux (before norm) = %.4e [v_r B/V]" % mass_flux)
-            rho0 = self._Macc / mass_flux / star.R_m**2
+            rho0 = self._Macc / mass_flux / star.R_m ** 2
         else:
             print("Error unstructured grid not yet")
 
@@ -783,7 +791,7 @@ class Grid:
             surface_integral(
                 self.grid[1], self.grid[2], -rhovr * rho0, axi_sym=self._2d
             )[0]
-            * star.R_m**2
+            * star.R_m ** 2
         )
         if verbose:
             print(
@@ -815,6 +823,43 @@ class Grid:
             self.T[lmag] *= Tmax / Tavg
             print("Tmax (after norm to <T>) = %lf K" % self.T[lmag].max())
             print("  <T> = %lf K" % np.average(self.T[lmag], weights=self.rho[lmag]))
+
+        return
+
+    def add_stellar_wind(
+        self,
+        star,
+        Rmin=1.0,
+        Mloss=1e-14,
+        beta=0.5,
+        Tmax=1e4,
+        v0=0,
+        vinf=1000.0,
+    ):
+        """
+        Adding a stellar wind.
+        """
+        tmp = np.copy(self.regions)
+        try:
+            tmp[self._ldead_zone == 1] = 1
+        except:
+            print("No (accreting) magnetosphere associated to the stellar wind.")
+        theta_max = np.amin(self.theta, where=tmp > 0, axis=0, initial=2 * np.pi)
+        lwind = ((self.regions == 0) * (self.r >= Rmin)) * (
+            self.theta < theta_max[None, :, :]
+        )
+
+        vr = 1e3 * (v0 + (vinf - v0) * (1.0 - Rmin / self.r[lwind]) ** beta)
+        self.v[0, lwind] = vr
+
+        self.rho[lwind] = (
+            Mloss
+            * Msun_per_year_to_SI
+            / (4 * np.pi * self.r[lwind] ** 2 * vr)
+            / star.R_m ** 2
+        )
+        self.T[lwind] = Tmax
+        self.regions[lwind] = 5
 
         return
 
@@ -868,7 +913,7 @@ class Grid:
         else:
             norm_mloss_surf_theo = (Rout ** (p_ml + 2) - Rin ** (p_ml + 2)) / (p_ml + 2)
         norm_mloss_surf_theo = (
-            Mloss_SI / norm_mloss_surf_theo * star.R_m**-2
+            Mloss_SI / norm_mloss_surf_theo * star.R_m ** -2
         )  # in kg/s/m2 / R^(p_ml+2)
         # norm in kg/s/(Rstar_m * R)^2/R^p_ml
         # such that norm * Rm**p_ml in kg/s/m2
@@ -884,7 +929,7 @@ class Grid:
         vK = vKz0 * (wi / self.R[ldw])
 
         # distance from the source point where the field lines diverge
-        q = np.sqrt(self.R**2 + (abs(self.z) + zs) ** 2)[ldw]
+        q = np.sqrt(self.R ** 2 + (abs(self.z) + zs) ** 2)[ldw]
         cos_delta = (abs(self.z)[ldw] + zs) / q
         l = q - zs / cos_delta
         vesc = star._vff / np.sqrt(self.R[ldw])
@@ -907,10 +952,10 @@ class Grid:
         return
 
     def get_B_module(self):
-        return np.sqrt((self.B**2).sum(axis=0))
+        return np.sqrt((self.B ** 2).sum(axis=0))
 
     def get_v_module(self):
-        return np.sqrt((self.v**2).sum(axis=0))
+        return np.sqrt((self.v ** 2).sum(axis=0))
 
     def get_v_cart(self):
         vx, vy, vz = spherical_to_cartesian(
@@ -1089,7 +1134,7 @@ class Grid:
         interpValFunc = CubicSpline(labeled_data["y"], labeled_data[quantity])
         values_interp = interpValFunc(y)
         Bphi = A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
-        B = np.sqrt(BR**2 + Bz**2 + Bphi**2)
+        B = np.sqrt(BR ** 2 + Bz ** 2 + Bphi ** 2)
 
         # Q = B[mask]
         # rl = Q * self.rho[mask] ** -2
@@ -1360,7 +1405,7 @@ class Grid:
             data_to_plot = np.log10(data_to_plot)
         else:
             if p_scale > 0:
-                data_to_plot = data_to_plot**p_scale
+                data_to_plot = data_to_plot ** p_scale
 
         zhat = (0, 0, 1)
         xhat = (1, 0, 0)
