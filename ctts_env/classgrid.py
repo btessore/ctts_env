@@ -838,6 +838,7 @@ class Grid:
     ):
         """
         Adding a stellar wind.
+        ** building: density not well normalised if not spherically symmetric **
         """
         tmp = np.copy(self.regions)
         try:
@@ -858,6 +859,8 @@ class Grid:
             / (4 * np.pi * self.r[lwind] ** 2 * vr)
             / star.R_m ** 2
         )
+        # TO DO: Normalize density
+        #
         self.T[lwind] = Tmax
         self.regions[lwind] = 5
 
