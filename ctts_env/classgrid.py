@@ -995,6 +995,14 @@ class Grid:
         self.Rmax = 0
         return
 
+    def add_disc_wind_BP82(self, star):
+        """
+        Disc wind model of Blandford & Payne 1982
+        see: Milliner et al. 2019
+        """
+
+        return
+
     def add_disc_wind(
         self,
         star,
