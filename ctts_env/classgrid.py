@@ -879,7 +879,9 @@ class Grid:
         beta=0.5,
         fesc=2,
         Tmax=10000,
+        Td_in=1500.0,
         z_limit=0,
+        beta_temp=1,
     ):
         """
         Mloss :: mass ejection rate in Msun/yr
@@ -890,12 +892,16 @@ class Grid:
         beta :: exponent of the radial velocity of the wind (acceleration parameter)
         fesc :: terminal velocity of the disc wind in unit of the escape velocity
         Tmax    :: Temperature max of the disc wind
-        z_limit :: the wind starts at abs(z) > z_limit (default 0 == midplane)
+        Td_in   :: temperature of the inner rim of the disc in z=0.
+        beta_temp  :: temperature exponent for the disc wind. Isothermal if 0
+        z_limit :: the wind temperature grows from the midplane to z_limit from T0
+            to Tmax. The law is \propto (Tmax-T0) * (abs(z)/z_limit)**beta_temp + T0
+        #z_limit :: the wind starts at abs(z) > z_limit (default 0 == midplane)
         """
         ldw = (
             (self.R >= Rin * (abs(self.z) + zs) / zs)
             * (self.R <= Rout * (abs(self.z) + zs) / zs)
-            * (abs(self.z) >= z_limit)
+            # * (abs(self.z) >= z_limit)
         )  #            * (abs(self.z) / self.R >= z_limit)
         self.regions[ldw] = 2
 
@@ -952,6 +958,12 @@ class Grid:
 
         self.rho[ldw] = rho0
         self.T[ldw] = Tmax
+
+        Tdisc = Td_in * (self.R[ldw] / Rin) ** gamma
+        zz = self.z[ldw]  # / self.R[ldw]
+        tt = np.minimum((Tmax - Tdisc) * (abs(zz) / z_limit) ** beta_temp + Tdisc, Tmax)
+        self.T[ldw] = tt
+
         return
 
     def get_B_module(self):
