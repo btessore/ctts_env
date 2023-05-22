@@ -870,95 +870,130 @@ class Grid:
     def add_disc_wind_knigge95(
         self,
         star,
-        Rin=3.0,
-        Rout=15,
-        Mloss=1e-10,
+        Rin=5,
+        Rout=50,
+        Mloss=1e-8,
         alpha=0.5,
         gamma=-0.5,
-        ls=10,
-        zs=15,
+        ls=50,
+        zs=10,
         beta=0.5,
         fesc=2,
         Tmax=10000,
-        Td_in=1500.0,
+        Td_in=2000.0,
         z_limit=0,
         beta_temp=1,
     ):
         """
-        Mloss :: mass ejection rate in Msun/yr
-        gamma :: temperature exponant such that T \propto R**gamma
-        alpha :: mass loss rate power law per unit area
-        ls :: disc wind length scale in unit of Rin
-        zs :: location above or below the midplane at R=0 where the field lines diverge (Source location).
-        beta :: exponent of the radial velocity of the wind (acceleration parameter)
-        fesc :: terminal velocity of the disc wind in unit of the escape velocity
-        Tmax    :: Temperature max of the disc wind
-        Td_in   :: temperature of the inner rim of the disc in z=0.
-        beta_temp  :: temperature exponent for the disc wind. Isothermal if 0
-        z_limit :: the wind temperature grows from the midplane to z_limit from T0
-            to Tmax. The law is \propto (Tmax-T0) * (abs(z)/z_limit)**beta_temp + T0
-        #z_limit :: the wind starts at abs(z) > z_limit (default 0 == midplane)
+        Knigge et al. 1995, MNRAS 273, 225
+        see also,
+        Kurosawa et al. 2011, MNRAS 416, 2623
+
+        Mloss       :: mass ejection rate in Msun/yr
+        gamma       :: temperature exponant such that T \propto R**gamma (q in Kurosawa's paper). gamma < 0
+        alpha       :: mass loss rate power law per unit area (alpha > 0)
+        ls          :: disc wind length scale-to-Rin ratio in unit of Rin (Rs in Kurosawa's).
+        zs          :: location above or below the midplane at R=0 where the field lines diverge (Source location, d in Kurosawa's).
+        beta        :: exponent of the radial velocity of the wind (acceleration parameter)
+        fesc        :: terminal velocity of the disc wind in unit of the escape velocity
+        Tmax        :: Temperature max of the disc wind
+        Td_in       :: temperature of the inner rim of the disc in z=0.
+        beta_temp   :: temperature exponent for the disc wind. Isothermal if 0
+        z_limit     :: the wind temperature grows from the midplane to z_limit from T0
+                       to Tmax. The law is \propto (Tmax-T0) * (abs(z)/z_limit)**beta_temp + T0
+        #z_limit     :: the wind starts at abs(z) > z_limit (default 0 == midplane)
         """
-        ldw = (
-            (self.R >= Rin * (abs(self.z) + zs) / zs)
-            * (self.R <= Rout * (abs(self.z) + zs) / zs)
-            # * (abs(self.z) >= z_limit)
-        )  #            * (abs(self.z) / self.R >= z_limit)
+        Td_min = 100  # K, minimum temperature allowed in the disc
+        ## condition to be in the disc wind region ##
+        ldw = (self.R >= Rin * (abs(self.z) + zs) / zs) * (
+            self.R <= Rout * (abs(self.z) + zs) / zs
+        )
+        # -> special condition with a cut-off in z
+        # ldw = (
+        #     (self.R >= Rin * (abs(self.z) + zs) / zs)
+        #     * (self.R <= Rout * (abs(self.z) + zs) / zs)
+        #     * (abs(self.z) >= z_limit)
+        # )  #            * (abs(self.z) / self.R >= z_limit)
         self.regions[ldw] = 2
-
-        p_ml = (
-            4.0 * gamma * alpha
-        )  # assuming the mass loss / m2 varies with R as mloss = cste * R^p_ml.
-        # p_ml + 1 should be < 0
-        # if p_ml + 1 >= 0:
-        #     print("dk_wind error: p_ml must be < 0 !", (p_ml))
-        #     exit()
-
-        l_dw = ls * Rin
+        ## disc wind length scale ##
+        Rs = ls * Rin
         Mloss_SI = Mloss * Msun_per_year_to_SI
+        self._Mloss_dw = Mloss
 
-        # mloss_surf in kg/s/m2 prop to integral over RdR of R^p_ml
-        if p_ml + 1 == -1:
-            norm_mloss_surf_theo = abs(np.log(Rout) - np.log(Rin))
+        ## mass-loss normalisation ##
+        # the local mass-loss rate (mdot) is proportional to the midplane temperature
+        # as mdot \propto T(R)**(4*alpha). The midplane temperature itself, beeing
+        # proportional R**gamma. therefore, mdot \propto R**p with p = 4 * alpha * gamma
+        p_ml = 4.0 * gamma * alpha
+        if p_ml > 0:
+            print("(ERROR) p_ml must be negative!")
+            exit()
+
+        # mloss_surf in kg/s/m2 prop to integral over RdR of R^p_ml to check
+        # here it is the inverse of the integral R^(p_ml+1)dR
+        if p_ml == -2:
+            fact = 1.0 / abs(np.log(Rout) - np.log(Rin))
         else:
-            norm_mloss_surf_theo = (Rout ** (p_ml + 2) - Rin ** (p_ml + 2)) / (p_ml + 2)
-        norm_mloss_surf_theo = (
-            Mloss_SI / norm_mloss_surf_theo * star.R_m ** -2
-        )  # in kg/s/m2 / R^(p_ml+2)
-        # norm in kg/s/(Rstar_m * R)^2/R^p_ml
-        # such that norm * Rm**p_ml in kg/s/m2
-        norm_mloss = norm_mloss_surf_theo
+            fact = (p_ml + 2) / (
+                (Rout ** (p_ml + 2) - Rin ** (p_ml + 2)) * star.R_m ** (p_ml + 2)
+            )  # m^-(p_ml + 2)
+        norm_mloss = Mloss_SI * fact  # in kg/s/m^(p_ml + 2)
+        # mass-loss on the disc surface
+        mloss_loc = (
+            norm_mloss * (star.R_m * self.R[ldw]) ** p_ml / (4 * np.pi)
+        )  # kg/s/m^2 : norm_mloss in kg/s/m^(p_ml+2)--> m^p_ml * m^(-p_ml - 2) = m^-2
 
-        # the constant norm_mloss takes Rm in stellar radius
-        mloss_loc = norm_mloss * self.R[ldw] ** p_ml  # norm_mloss in kg/s/m2/R**p_ml
-        # for each Rm found the corresponding wi i.e., Rm for z=0
+        ## temperature of the disc ##
+        Tdisc = np.maximum(Td_in * (self.R[ldw] / Rin) ** gamma, Td_min)
+        sound_speed_disc = 1e4 * np.sqrt(Tdisc * 1e-4)  # m/s
+
+        ## velocities ##
+        # the escape velocity is star._vff
+        # for each R found the corresponding wi i.e., R for z=0
         wi = zs / (abs(self.z[ldw]) + zs) * self.R[ldw]
-        vKz0 = (
+        # sqrt(G * M / wi_in_m), _vff is at the stellar surface in m.
+        vkep = (
             star._vff / np.sqrt(2.0) / np.sqrt(wi)
         )  # keplerian velocity express from escape velocity
-        vK = vKz0 * (wi / self.R[ldw])
+        vphi = vkep * (wi / self.R[ldw])  # angular momentum conservation along z
 
         # distance from the source point where the field lines diverge
         q = np.sqrt(self.R ** 2 + (abs(self.z) + zs) ** 2)[ldw]
         cos_delta = (abs(self.z)[ldw] + zs) / q
         l = q - zs / cos_delta
         vesc = star._vff / np.sqrt(self.R[ldw])
-        cs = 1e4 * (Rin / wi) ** 0.5  # m/s
-        vr = cs + (fesc * vesc - cs) * (1.0 - l_dw / (l + l_dw)) ** beta
-        vt = 0
-        vphi = vK
+        cs = sound_speed_disc  # 1e4 * (Rin / wi) ** 0.5  # m/s
+        vq = cs + (fesc * vesc - cs) * (1.0 - Rs / (l + Rs)) ** beta
 
-        # sintheta_dw = (self.z[ldw] + zs) / q
-        self.v[0, ldw] = vr
-        self.v[1, ldw] = vt
-        self.v[2, ldw] = vphi
+        ########################################################################
+        # needed because oorigin in z shifted by zs ##
+        rp = np.sqrt(
+            self.x[ldw] ** 2
+            + self.y[ldw] ** 2
+            + (self.z[ldw] + np.sign(self.z[ldw]) * zs) ** 2
+        )
+        tdw = np.arccos((np.abs(self.z[ldw]) + zs) / rp)
+        pdw = self.phi[ldw]
+        vx = vq * np.sin(tdw) * np.cos(pdw) - vphi * np.sin(pdw)
+        vy = vq * np.sin(tdw) * np.sin(pdw) + vphi * np.cos(pdw)
+        vz = np.sign(self.z[ldw]) * vq * np.cos(tdw)
+        self.v[0, ldw], self.v[1, ldw], self.v[2, ldw] = cartesian_to_spherical(
+            vx,
+            vy,
+            vz,
+            self._ct[ldw],
+            self._st[ldw],
+            self._cp[ldw],
+            self._sp[ldw],
+        )
+        ########################################################################
 
-        rho0 = mloss_loc / (vr * cos_delta) * (zs / (q * cos_delta)) ** 2
+        ## density ##
+        rho_dw = mloss_loc / (vq * cos_delta) * (zs / (q * cos_delta)) ** 2  # kg/m3
+        self.rho[ldw] = rho_dw
 
-        self.rho[ldw] = rho0
+        ## temperature ##
         self.T[ldw] = Tmax
-
-        Tdisc = Td_in * (self.R[ldw] / Rin) ** gamma
         zz = self.z[ldw]  # / self.R[ldw]
         tt = np.minimum((Tmax - Tdisc) * (abs(zz) / z_limit) ** beta_temp + Tdisc, Tmax)
         self.T[ldw] = tt
@@ -983,6 +1018,9 @@ class Grid:
         wind_model="sol40.dat",
         z_limit=0,
     ):
+        """
+        Descriptor to do.
+        """
         self._Rwind_in = Rin * star.R_m
         self._Rwind_out = Rout * star.R_m
 
@@ -1123,6 +1161,41 @@ class Grid:
         # self.T[mask] = logRadLoss_to_T(lgLambda)
         # self.regions[mask][self.T[mask] < 2000] = -1
         self.T[mask] = Tmax
+
+        return
+
+    def add_conical_stellar_wind(
+        self, star, Rej=1, Mloss=1e-8, thetao=30, v0=0, vinf=1e6, beta=0.5, Tmax=1e4
+    ):
+        """
+        Kurosawa et al. 2011, MNRAS 416, 2623
+
+        thetao      :: HALF opening angle of the conical wind (max pi/2).
+                        The wind occupies the region 0 to thetao in the northern hemisphere, and pi to pi-thetao in the southern.
+                        When thetao=pi/2, the wind becomes sphericaly symmetric (expands to 0 to pi/2 and to pi/2 to pi.).
+        Rej         :: Radius at which the wind is launched. if Rej > Rt+dr, there is no overlapping with the magnetosphere.
+                        Otherwise, the thetao must be changed accordingly to avoid overlap (Rej=1).
+        Mloss       :: mass ejection rate in Msun/yr
+        v0 & vinf   :: velocities at Rej and at r=infinity, respectively in m/s !!
+        beta        :: exponent of the radial velocity of the wind (acceleration parameter)
+        Tmax        :: Temperature max of the wind
+        """
+
+        oa = min(np.deg2rad(thetao), np.pi / 2)
+        cos_top = np.cos(oa)
+
+        lsw = (self.r > Rej) * (np.abs(self._ct) > cos_top)
+        self.regions[lsw] = 5
+
+        Mloss_SI = Mloss * Msun_per_year_to_SI
+
+        vr = (vinf - v0) * (1 - Rej / self.r[lsw]) ** beta + v0  # m/s
+        # 4*pi*star.R_m^2
+        rho_sw = Mloss_SI / (star.S_m2 * self.r[lsw] ** 2 * (1 - cos_top))
+
+        self.rho[lsw] = rho_sw
+        self.T[lsw] = Tmax
+        self.v[0, lsw] = vr
 
         return
 
