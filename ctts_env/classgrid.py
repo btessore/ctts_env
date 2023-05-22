@@ -142,6 +142,23 @@ class Grid:
 
         return
 
+    def get_B_module(self):
+        return np.sqrt((self.B ** 2).sum(axis=0))
+
+    def get_v_module(self):
+        return np.sqrt((self.v ** 2).sum(axis=0))
+
+    def get_v_cart(self):
+        vx, vy, vz = spherical_to_cartesian(
+            self.v[0], self.v[1], self.v[2], self._ct, self._st, self._cp, self._sp
+        )
+        return vx, vy, vz
+
+    def get_v_cyl(self):
+        vx, vy, vz = self.get_v_cart()
+        vR = vx * self._cp + vy * self._sp
+        return vR, vz, self.v[2]
+
     def calc_cells_volume(self, vol=[]):
         """
         3d grid's cells volume calculation
@@ -227,6 +244,30 @@ class Grid:
             # self._p_lim[k] = self._p_lim[k - 1] + dp
         return
 
+    def clean_grid(self, regions_to_clean=[]):
+        """
+        Clean an Grid instance by setting v, rho, T and Rmax to 0
+        for a specific region or all if regions_to_clean is empty
+
+        Only clean public variables.
+        Private variables, belonging to specifc regions (mag,wind), for
+        instance, (_Rt, _dr, _rho_axi etc...) are not cleaned. They are
+        overwritten at each call of the proper method.
+        """
+        if not np.any(regions_to_clean):
+            mask = np.ones(self.r.shape, dtype=bool)
+        else:
+            mask = self.regions == regions_to_clean[0]
+            for ir in range(1, len(regions_to_clean)):
+                mask *= self.regions == ir
+
+        self.regions[mask] = 0
+        self.v[:, mask] *= 0
+        self.rho[mask] *= 0
+        self.T[mask] *= 0
+        self.Rmax = 0
+        return
+
     def _check_overlap(self):
         """
         *** building ***
@@ -292,41 +333,6 @@ class Grid:
             # )
             self.regions[mask] = -1
             self.rho[mask] = 1e-5
-        return
-
-    def setup_dead_zone(self, star, rho, T):
-        """
-        ** building **
-        The density and the temperature are assumed to be
-        constant and given by rho and T, respectively.
-
-        The dead zone is in solid body rotation only.
-
-        """
-        try:
-            b = np.deg2rad(self._beta)
-        except:
-            print("Cannot add a dead zone if no accreting magnetosphere present!")
-            exit()
-            return
-
-        ldz = self._ldead_zone > 0
-        # v = np.sqrt(self._v2_dead_zone[ldz])
-        # sig_z = self._sign_z[ldz]
-        # m = -2.0 * star._m0 / self.r[ldz] ** 3
-        # br = m * (self._st * self._cp * np.sin(b) + self._ct * np.cos(b))[ldz]
-        # bt = -m / 2 * (self._ct * self._cp * np.sin(b) - self._st * np.cos(b))[ldz]
-        # bphi = m / 2 * (self._sp * np.sin(b))[ldz]
-        # Bmag = np.sqrt(br**2 + bt**2 + bphi**2)
-        # self.v[0, ldz] = v * br / Bmag * sig_z
-        # self.v[1, ldz] = v * bt / Bmag * sig_z
-        # self.v[2, ldz] = v * bphi / Bmag * sig_z + star._veq * self.R[ldz]
-        self.v[2, ldz] = star._veq * self.R[ldz]
-
-        self.regions[ldz] = 4
-        self.rho[ldz] = rho
-        self.T[ldz] = T
-
         return
 
     def add_mag(
@@ -629,6 +635,41 @@ class Grid:
 
         return
 
+    def setup_dead_zone(self, star, rho, T):
+        """
+        ** building **
+        The density and the temperature are assumed to be
+        constant and given by rho and T, respectively.
+
+        The dead zone is in solid body rotation only.
+
+        """
+        try:
+            b = np.deg2rad(self._beta)
+        except:
+            print("Cannot add a dead zone if no accreting magnetosphere present!")
+            exit()
+            return
+
+        ldz = self._ldead_zone > 0
+        # v = np.sqrt(self._v2_dead_zone[ldz])
+        # sig_z = self._sign_z[ldz]
+        # m = -2.0 * star._m0 / self.r[ldz] ** 3
+        # br = m * (self._st * self._cp * np.sin(b) + self._ct * np.cos(b))[ldz]
+        # bt = -m / 2 * (self._ct * self._cp * np.sin(b) - self._st * np.cos(b))[ldz]
+        # bphi = m / 2 * (self._sp * np.sin(b))[ldz]
+        # Bmag = np.sqrt(br**2 + bt**2 + bphi**2)
+        # self.v[0, ldz] = v * br / Bmag * sig_z
+        # self.v[1, ldz] = v * bt / Bmag * sig_z
+        # self.v[2, ldz] = v * bphi / Bmag * sig_z + star._veq * self.R[ldz]
+        self.v[2, ldz] = star._veq * self.R[ldz]
+
+        self.regions[ldz] = 4
+        self.rho[ldz] = rho
+        self.T[ldz] = T
+
+        return
+
     def add_magnetosphere_v1(
         self,
         star,
@@ -826,46 +867,6 @@ class Grid:
 
         return
 
-    def add_stellar_wind(
-        self,
-        star,
-        Rmin=1.0,
-        Mloss=1e-14,
-        beta=0.5,
-        Tmax=1e4,
-        v0=0,
-        vinf=1000.0,
-    ):
-        """
-        Adding a stellar wind.
-        ** building: density not well normalised if not spherically symmetric **
-        """
-        tmp = np.copy(self.regions)
-        try:
-            tmp[self._ldead_zone == 1] = 1
-        except:
-            print("No (accreting) magnetosphere associated to the stellar wind.")
-        theta_max = np.amin(self.theta, where=tmp > 0, axis=0, initial=2 * np.pi)
-        lwind = ((self.regions == 0) * (self.r >= Rmin)) * (
-            self.theta < theta_max[None, :, :]
-        )
-
-        vr = 1e3 * (v0 + (vinf - v0) * (1.0 - Rmin / self.r[lwind]) ** beta)
-        self.v[0, lwind] = vr
-
-        self.rho[lwind] = (
-            Mloss
-            * Msun_per_year_to_SI
-            / (4 * np.pi * self.r[lwind] ** 2 * vr)
-            / star.R_m ** 2
-        )
-        # TO DO: Normalize density
-        #
-        self.T[lwind] = Tmax
-        self.regions[lwind] = 5
-
-        return
-
     def add_disc_wind_knigge95(
         self,
         star,
@@ -948,8 +949,6 @@ class Grid:
         vphi = vK
 
         # sintheta_dw = (self.z[ldw] + zs) / q
-        # vR = vr * sintheta  # +vtheta * costheta
-        # vz = sign_z * vr * np.sqrt(1.0 - sintheta * sintheta)  # -vtheta * sintheta
         self.v[0, ldw] = vr
         self.v[1, ldw] = vt
         self.v[2, ldw] = vphi
@@ -964,47 +963,6 @@ class Grid:
         tt = np.minimum((Tmax - Tdisc) * (abs(zz) / z_limit) ** beta_temp + Tdisc, Tmax)
         self.T[ldw] = tt
 
-        return
-
-    def get_B_module(self):
-        return np.sqrt((self.B ** 2).sum(axis=0))
-
-    def get_v_module(self):
-        return np.sqrt((self.v ** 2).sum(axis=0))
-
-    def get_v_cart(self):
-        vx, vy, vz = spherical_to_cartesian(
-            self.v[0], self.v[1], self.v[2], self._ct, self._st, self._cp, self._sp
-        )
-        return vx, vy, vz
-
-    def get_v_cyl(self):
-        vx, vy, vz = self.get_v_cart()
-        vR = vx * self._cp + vy * self._sp
-        return vR, vz, self.v[2]
-
-    def clean_grid(self, regions_to_clean=[]):
-        """
-        Clean an Grid instance by setting v, rho, T and Rmax to 0
-        for a specific region or all if regions_to_clean is empty
-
-        Only clean public variables.
-        Private variables, belonging to specifc regions (mag,wind), for
-        instance, (_Rt, _dr, _rho_axi etc...) are not cleaned. They are
-        overwritten at each call of the proper method.
-        """
-        if not np.any(regions_to_clean):
-            mask = np.ones(self.r.shape, dtype=bool)
-        else:
-            mask = self.regions == regions_to_clean[0]
-            for ir in range(1, len(regions_to_clean)):
-                mask *= self.regions == ir
-
-        self.regions[mask] = 0
-        self.v[:, mask] *= 0
-        self.rho[mask] *= 0
-        self.T[mask] *= 0
-        self.Rmax = 0
         return
 
     def add_disc_wind_BP82(self, star):
@@ -1165,6 +1123,48 @@ class Grid:
         # self.T[mask] = logRadLoss_to_T(lgLambda)
         # self.regions[mask][self.T[mask] < 2000] = -1
         self.T[mask] = Tmax
+
+        return
+
+    # building not working properly because density is normalised only for
+    # spherically symmetric flows
+    def add_stellar_wind(
+        self,
+        star,
+        Rmin=1.0,
+        Mloss=1e-14,
+        beta=0.5,
+        Tmax=1e4,
+        v0=0,
+        vinf=1000.0,
+    ):
+        """
+        Adding a stellar wind.
+        ** building: density not well normalised if not spherically symmetric **
+        """
+        tmp = np.copy(self.regions)
+        try:
+            tmp[self._ldead_zone == 1] = 1
+        except:
+            print("No (accreting) magnetosphere associated to the stellar wind.")
+        theta_max = np.amin(self.theta, where=tmp > 0, axis=0, initial=2 * np.pi)
+        lwind = ((self.regions == 0) * (self.r >= Rmin)) * (
+            self.theta < theta_max[None, :, :]
+        )
+
+        vr = 1e3 * (v0 + (vinf - v0) * (1.0 - Rmin / self.r[lwind]) ** beta)
+        self.v[0, lwind] = vr
+
+        self.rho[lwind] = (
+            Mloss
+            * Msun_per_year_to_SI
+            / (4 * np.pi * self.r[lwind] ** 2 * vr)
+            / star.R_m ** 2
+        )
+        # TO DO: Normalize density
+        #
+        self.T[lwind] = Tmax
+        self.regions[lwind] = 5
 
         return
 
