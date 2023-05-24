@@ -883,6 +883,7 @@ class Grid:
         Td_in=2000.0,
         z_limit=0,
         beta_temp=1,
+        scale_as_zoR0=True,
     ):
         """
         Knigge et al. 1995, MNRAS 273, 225
@@ -901,6 +902,8 @@ class Grid:
         beta_temp   :: temperature exponent for the disc wind. Isothermal if 0
         z_limit     :: the wind temperature grows from the midplane to z_limit from T0
                        to Tmax. The law is \propto (Tmax-T0) * (abs(z)/z_limit)**beta_temp + T0
+        scale_as_zoR0:: if True, the temperature reaches its maximum in z/R0 = z_limit.
+                        Otherwise, for z = z_limit.
         #z_limit     :: the wind starts at abs(z) > z_limit (default 0 == midplane)
         """
         Td_min = 100  # K, minimum temperature allowed in the disc
@@ -1003,10 +1006,13 @@ class Grid:
 
         ## temperature ##
         self.T[ldw] = Tmax
-        zz = self.z[ldw] / np.sqrt((q - l) ** 2 - zs**2)  # / self.R[ldw]
+        zz0 = z_limit  # / np.sqrt((q - l) ** 2 - zs**2)
+        if scale_as_zoR0:
+            zz = self.z[ldw] / np.sqrt((q - l) ** 2 - zs**2)  # / self.R[ldw]
         # print("R0=",np.sqrt((q - l) ** 2 - zs**2))
         # z_limit / R0
-        zz0 = z_limit  # / np.sqrt((q - l) ** 2 - zs**2)
+        else:
+            zz = self.z[ldw]
         tt = np.minimum((Tmax - Tdisc) * (abs(zz) / zz0) ** beta_temp + Tdisc, Tmax)
         self.T[ldw] = tt
 
