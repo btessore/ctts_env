@@ -1158,11 +1158,7 @@ class Grid:
         Bphi = A * np.multiply(values_interp, (star.R_au * self.R) ** beta)
         B = np.sqrt(BR**2 + Bz**2 + Bphi**2)
 
-        # Q = B[mask]
-        # rl = Q * self.rho[mask] ** -2
-        # lgLambda = np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax)
-        # self.T[mask] = logRadLoss_to_T(lgLambda)
-        # self.regions[mask][self.T[mask] < 2000] = -1
+        ## TO DO: add the same T law as for Knigge's disc winds if correct. ##
         self.T[mask] = Tmax
 
         return
