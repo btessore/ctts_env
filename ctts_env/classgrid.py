@@ -965,6 +965,15 @@ class Grid:
         cs = sound_speed_disc  # 1e4 * (Rin / wi) ** 0.5  # m/s
         vq = cs + (fesc * vesc - cs) * (1.0 - Rs / (l + Rs)) ** beta
 
+        # beta for each field lines, such that at z_limit, vq = 200 km/s
+        # r0 = np.sqrt((q - l) ** 2 - zs**2)
+        # l0 = np.sqrt(r0**2 + (z_limit + zs) ** 2) * (1.0 - zs / (z_limit + zs))
+        # y = Rs / (Rs + l0)
+        # beta_R0 = np.log((200e3 - cs) / (fesc * vesc - cs)) / np.log(1 - y)
+        # print(beta_R0)
+        # print(cs + (fesc * vesc - cs) * (1.0 - Rs / (l0 + Rs)) ** beta_R0)
+        # vq = cs + (fesc * vesc - cs) * (1.0 - Rs / (l + Rs)) ** beta_R0
+
         ########################################################################
         # needed because oorigin in z shifted by zs #
         rp = np.sqrt(
@@ -994,10 +1003,10 @@ class Grid:
 
         ## temperature ##
         self.T[ldw] = Tmax
-        zz = self.z[ldw] / self.R[ldw]
+        zz = self.z[ldw] / np.sqrt((q - l) ** 2 - zs**2)  # / self.R[ldw]
         # print("R0=",np.sqrt((q - l) ** 2 - zs**2))
         # z_limit / R0
-        zz0 = z_limit / np.sqrt((q - l) ** 2 - zs**2)
+        zz0 = z_limit  # / np.sqrt((q - l) ** 2 - zs**2)
         tt = np.minimum((Tmax - Tdisc) * (abs(zz) / zz0) ** beta_temp + Tdisc, Tmax)
         self.T[ldw] = tt
 
