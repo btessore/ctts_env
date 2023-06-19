@@ -884,6 +884,7 @@ class Grid:
         z_limit=0,
         beta_temp=1,
         scale_as_zoR0=True,
+        z_cutoff=True,
     ):
         """
         Knigge et al. 1995, MNRAS 273, 225
@@ -904,13 +905,15 @@ class Grid:
                        to Tmax. The law is \propto (Tmax-T0) * (abs(z)/z_limit)**beta_temp + T0
         scale_as_zoR0:: if True, the temperature reaches its maximum in z/R0 = z_limit.
                         Otherwise, for z = z_limit.
-        #z_limit     :: the wind starts at abs(z) > z_limit (default 0 == midplane)
+        z_cutoff     :: (bool) if True the wind starts at abs(z) > z_limit (default 0 == midplane).
         """
         Td_min = 100  # K, minimum temperature allowed in the disc
         ## condition to be in the disc wind region ##
         ldw = (self.R >= Rin * (abs(self.z) + zs) / zs) * (
             self.R <= Rout * (abs(self.z) + zs) / zs
         )
+        if z_cutoff:
+            ldw *= abs(self.z) >= z_limit
         # -> special condition with a cut-off in z
         # ldw = (
         #     (self.R >= Rin * (abs(self.z) + zs) / zs)
@@ -1006,6 +1009,9 @@ class Grid:
 
         ## temperature ##
         self.T[ldw] = Tmax
+        if z_cutoff:
+            return
+
         zz0 = z_limit  # / np.sqrt((q - l) ** 2 - zs**2)
         if scale_as_zoR0:
             zz = self.z[ldw] / np.sqrt((q - l) ** 2 - zs**2)  # / self.R[ldw]
