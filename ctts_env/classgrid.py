@@ -1294,6 +1294,73 @@ class Grid:
         print("phi max/min:")
         print(np.rad2deg(self.phi[0, 0, :].min()), np.rad2deg(self.phi[0, 0, :].max()))
 
+        f = open(filename, "wb")
+
+        # write sizes along each direction + limits (size + 1)
+        f.write(np.array(self.shape[0], dtype=np.int32).tobytes())
+        f.write(np.single(self._r_lim).tobytes())
+        f.write(np.array(self.shape[1], dtype=np.int32).tobytes())
+        f.write(np.single(self._sint_lim).tobytes())
+        f.write(np.array(self.shape[2], dtype=np.int32).tobytes())
+        f.write(np.single(self._p_lim).tobytes())
+
+        # f.write(np.array((0, 1)[laccretion]).tobytes())
+        f.write(np.array((0, 1)[laccretion], dtype=np.int32).tobytes())
+        f.write(np.array(Thp, dtype=float).tobytes())
+        f.write(np.array(Tpre_shock, dtype=float).tobytes())
+
+        f.write(self.T[:, :, :].T.tobytes())
+        f.write(self.rho[:, :, :].T.tobytes())
+        f.write(self.ne[:, :, :].T.tobytes())
+        v3d = np.zeros((3, self.shape[2], self.shape[1], self.shape[0]))
+        v3d[0] = self.v[0, :, :, :].T
+        v3d[1] = self.v[2, :, :, :].T
+        v3d[2] = self.v[1, :, :, :].T
+        # float 32 for real and float for double precision kind=dp
+        f.write(np.float32(v3d).tobytes())
+        # vturb -> 0
+        f.write(np.zeros(np.product(self.shape)).tobytes())
+        #
+        dz = np.copy(self.regions[:, :, :])
+        dz[dz > 0] = 1
+        f.write(np.int32(dz).T.tobytes())
+        f.close()
+        return
+
+    def _write_deprec(
+        self,
+        filename,
+        Thp=0,
+        Tpre_shock=9000.0,
+        laccretion=True,
+        rlim_au=[0, 1000],
+    ):
+        """
+        Deprecated version not working with recent version
+
+        This method writes the Grid() instance to a binary file, to be used
+        by the RT code MCFOST.
+
+        Velocity field in spherical coordinates.
+
+        """
+
+        self.calc_cells_limits(rlim_au[0], rlim_au[1])
+
+        print("r limits:")
+        print(self._r_lim[0], self._r_lim[-1])
+        print("r min/max ():", self.r.min(), self.r.max())
+        print("theta limits:")
+        print(np.rad2deg(self._tlim[0]), np.rad2deg(self._tlim[-1]))
+        print("theta min/max:")
+        print(
+            np.rad2deg(self.theta[0, :, 0].min()), np.rad2deg(self.theta[0, :, 0].max())
+        )
+        print("phi limits:")
+        print(np.rad2deg(self._p_lim[0]), np.rad2deg(self._p_lim[-1]))
+        print("phi max/min:")
+        print(np.rad2deg(self.phi[0, 0, :].min()), np.rad2deg(self.phi[0, 0, :].max()))
+
         from scipy.io import FortranFile
 
         f = FortranFile(filename, "w")
