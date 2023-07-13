@@ -50,7 +50,6 @@ def surface_integral(t, p, q, axi_sym=False):
 
 
 def spherical_to_cartesian(r, t, p, ct, st, cp, sp):
-
     x = r * st * cp + t * ct * cp - sp * p
     y = r * st * sp + t * ct * sp + cp * p
     z = r * ct - t * st
@@ -59,7 +58,6 @@ def spherical_to_cartesian(r, t, p, ct, st, cp, sp):
 
 
 def cartesian_to_spherical(x, y, z, ct, st, cp, sp):
-
     r = x * st * cp + y * st * sp + z * ct
     t = x * ct * cp + y * ct * sp - z * st
     p = -x * sp + y * cp
@@ -91,3 +89,57 @@ def shock_area(Rt, dr, beta=0, f=1):
                 f = 0.5. (f in ~[0.5, 1])
     """
     return f * Gamma(Rt, dr) * np.cos(np.deg2rad(beta))
+
+
+def _old_bin_format_to_new(fold, fnew):
+    """
+    *** Not tested yet ***
+    fold: filename in the old bin format generated with _write_deprec.
+    fnew: filename to write the old format bin in the new format.
+
+    The new format is essentially the same but not produced with scipy.io
+    FortranFile, which is compatible with old fortan i/o binary handling.
+    the access="sequential" has been changed to access="stream" in the fortran code
+    which is more modern.
+
+    """
+
+    # I simply open the old file format (f) and write immediately after
+    # in the new file format (fn) like Grid()_write() does.
+
+    from scipy.io import FortranFile
+
+    f = FortranFile(fold, "r")
+    fn = open(fnew, "wb")
+    Nr = f.read_ints()
+    fn.write(np.array(Nr, dtype=np.int32).tobytes())
+    fn.write(np.single(f.read_record(np.single)).tobytes())
+    Nt = f.read_ints()
+    fn.write(np.array(Nt, dtype=np.int32).tobytes())
+    fn.write(np.single(f.read_record(np.single)).tobytes())
+    Np = f.read_ints()
+    fn.write(np.array(Np, dtype=np.int32).tobytes())
+    fn.write(np.single(f.read_record(np.single)).tobytes())
+    shape = (Nr, Nt, Np)
+
+    fn.write(np.array(f.read_ints(), dtype=np.int32).tobytes())
+    fn.write(np.array(f.read_reals(), dtype=float).tobytes())
+    fn.write(np.array(f.read_reals(), dtype=float).tobytes())
+
+    # data might be transposed on reading though to check
+
+    fn.write(np.reshape(f.read_record(float), shape).tobytes())
+    fn.write(np.reshape(f.read_record(float), shape).tobytes())
+    fn.write(f.read_record(float).tobytes())
+
+    v3d = np.reshape(f.read_record(np.float32), (3, Np[0], Nt[0], Nr[0]))
+    # float 32 for real and float for double precision kind=dp
+    fn.write(np.float32(v3d).tobytes())
+    fn.write(f.read_record(float).tobytes())
+
+    fn.write(f.read_record(np.intc).tobytes())
+
+    f.close()
+    fn.close()
+
+    return
