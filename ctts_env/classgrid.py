@@ -345,6 +345,7 @@ class Grid:
         Tmax=8000,
         verbose=False,
         V0=0,
+        lsec=False,
     ):
         """
         star    :: An instance of the class Star
@@ -359,6 +360,7 @@ class Grid:
         verbose :: print info if True
         Tmax    :: value of the temperature maximum in the magnetosphere
         V0      :: value of the velocity at the injection point (m/s)
+        lsec    :: keep the secondary columns that have positive and negative v^2 along the field line.
         """
         self._beta = beta
         ma = np.deg2rad(self._beta)
@@ -430,6 +432,8 @@ class Grid:
         N_fl = 10000
         # record the valid values of R0
         # R0 = np.zeros(self.shape)
+        self._lpropeller = np.zeros(self.shape, dtype=bool)
+        self._lsecondary_col = np.zeros(self.shape, dtype=bool)
         for k in range(self.shape[2]):
             for j in range(self.shape[1]):
                 for i in range(self.shape[0]):
@@ -505,6 +509,22 @@ class Grid:
                                 * (star.R_m * star._omega) ** 2
                                 + V0**2
                             )
+                        elif lsec:  # part of the gas along the field line is ejecting.
+                            v_square[i, j, k] = (
+                                2
+                                * Ggrav
+                                * star.M_kg
+                                / star.R_m
+                                * (1 / self.r[i, j, k] - 1 / r0)
+                                + (self.R[i, j, k] ** 2 - r0**2)
+                                * (star.R_m * star._omega) ** 2
+                                + V0**2
+                            )
+                            self._lsecondary_col[i, j, k] = True
+                            # default False
+                            if v_square[i, j, k] < 0:
+                                self._lpropeller[i, j, k] = True
+                                v_square[i, j, k] *= -1.0
                     elif r0 < rmi:
                         self._ldead_zone[i, j, k] = 1
                         self._v2_dead_zone[i, j, k] = abs(
@@ -541,11 +561,15 @@ class Grid:
         B = self.get_B_module()
 
         sig_z = self._sign_z[self._laccr]
+        # useful to change the sign of vr for propeller region or already in B ?
+        # _psign = (
+        #     -2 * self._lpropeller[self._laccr] + 1
+        # )  # -1 if ejecting, 1 otherwise (accreting)
         v = np.sqrt(v_square[self._laccr])
 
         vr = v * self.B[0, self._laccr] / B[self._laccr] * sig_z
         vt = v * self.B[1, self._laccr] / B[self._laccr] * sig_z
-        vp = v * self.B[2, self._laccr] / B[self._laccr] * sig_z
+        vp = v * self.B[2, self._laccr] / B[self._laccr] * sig_z  # why sig_z here ?
         u_phi = star._veq * self.R[self._laccr] + vp
         self.v[0, self._laccr] = vr
         self.v[1, self._laccr] = vt
@@ -631,6 +655,17 @@ class Grid:
         Q = B[self._laccr]
         rl = Q * self.rho[self._laccr] ** -2
         lgLambda = np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax)
+        if lsec:  # force similar T independently of density constrast
+            self.T[self._laccr] = 0.0
+            lgLambda = -1 + np.zeros(self.shape)
+            rl = B[self._lsecondary_col] * self.rho[self._lsecondary_col] ** -2
+            lgLambda[self._lsecondary_col] = np.log10(rl / rl.max()) + T_to_logRadLoss(
+                Tmax
+            )
+            cond = (~self._lsecondary_col) * self._laccr
+            rl = B[cond] * self.rho[cond] ** -2
+            lgLambda[cond] = np.log10(rl / rl.max()) + T_to_logRadLoss(Tmax)
+            lgLambda = lgLambda[self._laccr]
         self.T[self._laccr] = logRadLoss_to_T(lgLambda)
 
         return
@@ -1548,6 +1583,7 @@ class Grid:
         view=(0, 0),
         logscale=False,
         p_scale=0.5,
+        show_vr=False,
     ):
         """
         *** Building ***
@@ -1581,6 +1617,8 @@ class Grid:
         # smaller array
         if show_T:
             data_to_plot = self.T[mask]
+        elif show_vr:
+            data_to_plot = self.v[0, mask]
         else:
             data_to_plot = self.rho[mask]  # self.get_B_module()[mask]
         # Color scale scaling for the scatter density
