@@ -276,10 +276,78 @@ class Grid:
         """
         return
 
-    def add_disc(self):
+    def add_disc(
+        self, star, Rin, Md, p, beta, H0, r0=1, wall=False, phi0=0, Rwi=1, Aw=1
+    ):
         """
-        Dust and gas disc
+        Dust and gas disc.
+        The temperature of the gas in the disc follows the dust temperature.
+        Still, below T_molec all the atoms are bound to a molecule and atomic densities
+        are zero (not atomic transfer).
+
+        Rin :: inner edge of the disc (outer edge is fixed by the grid)
+        Md  :: disc's mass in Mstar (not Msun)
+        p   :: exponent
+        beta    :: exponent
+        H0  :: disc scale height in Rstar
+        r0  :: reference radius for the scale height in Rstar
+
+        wall    :: add a wall to the disc ?
+        phi0    :: origin of the wall in the azimuthal plane (max at phi0)
+        Rwi :: inner radius of the wall (where it starts)
+        Aw  :: width of the wall (in the z direction)
         """
+
+        # TO DO define a mask to identify a region corresponding to the  disc
+        # because at the moment it expands on the whole volume
+        # with potential overlap with other regions
+        midplane = np.argmin((self.theta[0, :, 0] - np.pi / 2) ** 2)
+        Rout = self.R.max()
+
+        K = star.M_kg * Md / (2 * np.pi) ** 1.5 / H0 / r0**2 / star.R_m**3
+        if p == -2:
+            K2 = 1.0 / np.log(Rout / Rin)
+        else:
+            K2 = ((p + 2) * r0 ** (p + 2)) / (Rout ** (p + 2) - Rin ** (p + 2))
+
+        K3_exp = 2 * (H0 * (self.R / r0) ** beta) ** 2
+        K3 = (self.R / r0) ** (p - beta) * np.exp(-(self.z**2) / K3_exp)
+
+        rho = K * K2 * K3
+        rho[self.R <= Rin] = 0.0
+        # mask for the disc ? has a function of scale height ?
+        # for each r the disc is where z < eps * H ?
+        self.rho = rho
+
+        dwidth = 0
+        if (wall) and (not self._2d):
+            # midplane from the grid resolution ?
+            # zmin = dwidth + np.amin(abs(self.z), axis=1)
+            zmin = 0.0
+            dwall = abs(
+                Rwi
+                - self.R[
+                    np.argmin((self.R[:, midplane, 0] - Rwi) ** 2) + 1, midplane, 0
+                ]
+            )
+            dwall = Rwi * 0.1
+            north = (1.0 + np.cos(self.phi + phi0)) / 2.0
+            sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
+            wall_mask = (self.R <= Rwi + dwall) * (
+                self.z <= zmin[:, None, :] + Aw * north
+            ) * (self.z >= 0) | (self.z >= -zmin[:, None, :] - Aw * sud) * (self.z < 0)
+            mask = (self.R > Rwi) * wall_mask
+            Rwo = Rwi + dwall
+            if p == -2:
+                K2_wall = 1.0 / np.log(Rwo / Rwi)
+            else:
+                K2_wall = ((p + 2) * r0 ** (p + 2)) / (Rwo ** (p + 2) - Rwi ** (p + 2))
+            self.rho[wall_mask] = self.rho[self.rho > 0].min()  # K * K2_wall * K3[mask]
+
+        self.regions[self.rho > 0] = 2
+        # accreting velocity ??
+        # Keplerian velocity
+        self.v[2] = np.sqrt(Ggrav * star.M_kg * self.R**2 / self.r**3 / star.R_m)
         return
 
     def add_dark_disc(self, Rin, dwidth=0, Td=0, wall=False, phi0=0, Rwi=1, Aw=1, Tw=0):
