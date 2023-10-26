@@ -1293,6 +1293,9 @@ class Grid:
         """
         Kurosawa et al. 2011, MNRAS 416, 2623
 
+        TO improve with Wilson et al. 2022, MNRAS 514, 2162–2180
+        for a better match close to the stellar surface
+
         thetao      :: HALF opening angle of the conical wind (max pi/2).
                         The wind occupies the region 0 to thetao in the northern hemisphere, and pi to pi-thetao in the southern.
                         When thetao=pi/2, the wind becomes sphericaly symmetric (expands to 0 to pi/2 and to pi/2 to pi.).
@@ -1371,13 +1374,16 @@ class Grid:
         Tpre_shock=9000.0,
         laccretion=True,
         rlim_au=[0, 1000],
+        coord=3,
     ):
         """
 
         This method writes the Grid() instance to a binary file, to be used
         by the RT code MCFOST.
 
-        Velocity field in spherical coordinates.
+        Velocity fields in spherical coordinates:
+        However, for debugging with MCFOST, it is possible to write the velocity
+        field in cartian (coord=1) or cylindrical coordinates (coord=2).
 
         """
 
@@ -1416,6 +1422,13 @@ class Grid:
         f.write(self.rho[:, :, :].T.tobytes())
         f.write(self.ne[:, :, :].T.tobytes())
         v3d = np.zeros((3, self.shape[2], self.shape[1], self.shape[0]))
+        # Similar to mcfost vfield_coord
+        if coord == 1:  # cart
+            print("*** Using cartesian velocity fields (coord=%d)" % coord)
+            self.v[0], self.v[1], self.v[2] = self.get_v_cart()
+        elif coord == 2:  # cyl
+            print("*** Using cylindrical velocity fields (coord=%d)" % coord)
+            self.v[0], self.v[1], self.v[2] = self.get_v_cyl()
         v3d[0] = self.v[0, :, :, :].T
         v3d[1] = self.v[2, :, :, :].T
         v3d[2] = self.v[1, :, :, :].T
