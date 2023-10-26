@@ -1225,6 +1225,9 @@ class Grid:
         """
         Kurosawa et al. 2011, MNRAS 416, 2623
 
+        TO improve with Wilson et al. 2022, MNRAS 514, 2162–2180
+        for a better match close to the stellar surface
+
         thetao      :: HALF opening angle of the conical wind (max pi/2).
                         The wind occupies the region 0 to thetao in the northern hemisphere, and pi to pi-thetao in the southern.
                         When thetao=pi/2, the wind becomes sphericaly symmetric (expands to 0 to pi/2 and to pi/2 to pi.).
