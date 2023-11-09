@@ -121,6 +121,12 @@ class Grid:
         self.T = np.zeros(self.shape)
         self.ne = np.zeros(self.shape)  # electronic density
 
+        self.gas_to_dust = 0
+        # self.rho_dust = np.zeros((self.N_dust_grains,) + self.shape)
+        # At the moment, the total dust density is given to MCFOST
+        # and the dust populations are normalised from the parameter file.
+        self.rho_dust = np.zeros(self.shape)
+
         self.Rmax = 0
 
         self.regions = np.zeros(self.shape, dtype=int)
@@ -277,7 +283,19 @@ class Grid:
         return
 
     def add_disc(
-        self, star, Rin, Md, p, beta, H0, r0=1, wall=False, phi0=0, Rwi=1, Aw=1
+        self,
+        star,
+        Rin,
+        Md,
+        p,
+        beta,
+        H0,
+        r0=1,
+        gas_to_dust=100,
+        wall=False,
+        phi0=0,
+        Rwi=1,
+        Aw=1,
     ):
         """
         Dust and gas disc.
@@ -291,6 +309,7 @@ class Grid:
         beta    :: exponent
         H0  :: disc scale height in Rstar
         r0  :: reference radius for the scale height in Rstar
+        gas_to_dust  :: gas/dust ratio
 
         wall    :: add a wall to the disc ?
         phi0    :: origin of the wall in the azimuthal plane (max at phi0)
@@ -303,6 +322,7 @@ class Grid:
         # with potential overlap with other regions
         midplane = np.argmin((self.theta[0, :, 0] - np.pi / 2) ** 2)
         Rout = self.R.max()
+        self.gas_to_dust = gas_to_dust
 
         K = star.M_kg * Md / (2 * np.pi) ** 1.5 / H0 / r0**2 / star.R_m**3
         if p == -2:
@@ -317,7 +337,6 @@ class Grid:
         rho[self.R <= Rin] = 0.0
         # mask for the disc ? has a function of scale height ?
         # for each r the disc is where z < eps * H ?
-        self.rho = rho
 
         dwidth = 0
         if (wall) and (not self._2d):
@@ -344,12 +363,17 @@ class Grid:
                 K2_wall = ((p + 2) * r0 ** (p + 2)) / (Rwo ** (p + 2) - Rwi ** (p + 2))
             self.rho[wall_mask] = self.rho[self.rho > 0].min()  # K * K2_wall * K3[mask]
 
-        self.regions[self.rho > 0] = 2
-        # accreting velocity ??
+        self.rho = 1 / (1 + 1 / self.gas_to_dust) * rho  # gas
+        # Total dust density at the moment.
+        self.rho_dust = 1 / (1 + self.gas_to_dust) * rho  # rho - self.rho
+
+        self.regions[self.rho > 0] = 3
         # Keplerian velocity
-        self.v[2] = np.sqrt(Ggrav * star.M_kg * self.R**2 / self.r**3 / star.R_m)
+        self.v[2] += np.sqrt(Ggrav * star.M_kg * self.R**2 / self.r**3 / star.R_m)
         return
 
+    # Future deprecation: the disc will be treated self-consistently and the dark region
+    # will disappear.
     def add_dark_disc(self, Rin, dwidth=0, Td=0, wall=False, phi0=0, Rwi=1, Aw=1, Tw=0):
         """
         Optically thick and ultra-cool disc.
@@ -358,12 +382,12 @@ class Grid:
 
         Rin :: inner radius at which the disc starts
         dwidth  :: the constant width (in the z direction) of the disc
-        Td  :: (constant) Temperature of the disc
+        Td  :: Temperature of the disc (Only the surface emits as a black body)
         wall    :: add a wall to the disc ?
         phi0    :: origin of the wall in the azimuthal plane (max at phi0)
         Rwi :: inner radius of the wall (where it starts)
         Aw  :: width of the wall (in the z direction)
-        Td  :: (constant) Temperature of the wall
+        Tw  :: Temperature of the wall (Only the surface emits as a black body)
         """
         # zmin = dwidth + np.amin(abs(self.z), axis=(1, 2))
         # mask = (self.R > Rin) * (abs(self.z) <= zmin[:, None, None])
@@ -1293,8 +1317,11 @@ class Grid:
         """
         Kurosawa et al. 2011, MNRAS 416, 2623
 
-        TO improve with Wilson et al. 2022, MNRAS 514, 2162–2180
-        for a better match close to the stellar surface
+        TO DO:
+            1) improve with Wilson et al. 2022, MNRAS 514, 2162–2180
+            for a better match close to the stellar surface
+            2) rotational velocity of the wind
+
 
         thetao      :: HALF opening angle of the conical wind (max pi/2).
                         The wind occupies the region 0 to thetao in the northern hemisphere, and pi to pi-thetao in the southern.
@@ -1440,6 +1467,10 @@ class Grid:
         dz = np.copy(self.regions[:, :, :])
         dz[dz > 0] = 1
         f.write(np.int32(dz).T.tobytes())
+        # even if not dust.
+        f.write(np.array(self.gas_to_dust, dtype=float).tobytes())
+        # f.write(np.array((0, 1)[self.ldust], dtype=np.int32).tobytes())
+        f.write(self.rho_dust.T.tobytes())
         f.close()
         return
 
@@ -1903,6 +1934,8 @@ class Grid:
                 vR = self._cp[cond] * vx + self._sp[cond] * vy
                 print(" <//> %s" % self.regions_label[ir], file=fout)
                 # Info. specific to a regions, existing only if the proper method has been called.
+                if ir == 3 and self.gas_to_dust > 0:
+                    print("Gas/dust = %.3f" % self.gas_to_dust, file=fout)
                 if ir == 1:
                     print(
                         "   rmi = %lf Rstar; rmo = %lf Rstar"
