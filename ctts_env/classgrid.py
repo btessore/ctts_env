@@ -78,7 +78,7 @@ class Grid:
         self._2d = phi.max() == phi.min()  # only a slice phi = array([0.]*Nr*Nt)
         if self._2d and theta[0, :, 0].max() > np.pi / 2:
             print("Warning: Nphi = 1 but model is 2.5d !")
-            print(" might have bugs at writing and density normalisation.")
+            print(" check density normalisation.")
 
         if self.structured:
             self.grid = (r[:, 0, 0], theta[0, :, 0], phi[0, 0, :])
@@ -200,54 +200,36 @@ class Grid:
 
     def calc_cells_limits(self, rmin, rmax):
         """
-        From the cell centres (self.r, self.theta, self.phi), computes the cell limits
-        There is one more point in each direction.
-        In 2d symmetry (no 2.5d), sin(theta) limits go from 1 to 0 (pi/2 to 0).
-        in 3d, sin(theta) limits go from 1 to -1.
+        From the cell centres, compute the cell limits.
+        There is one point in each direction more.
+        WARNING: does not work properly if t is linear in cos.
         """
 
         if self.shape[-1] > 1:
             self._p_lim = np.zeros(self.shape[-1] + 1)
         else:
             self._p_lim = np.zeros(1)
-        self._r_lim = np.zeros(self.shape[0] + 1)
-        jend = (self.shape[1] // 2, self.shape[1])[self._2d]
-        self._sint_lim = np.zeros(self.shape[1] + 1) - 1000  # debug
+        # 2.5d not perfectly handled in terms of mass-loss normalisation
+        l3d = False
+        if self.shape[-1] > 1 or self.theta.max() > np.pi / 2:
+            l3d = True
 
+        # regular non-linear lim in r
+        self._r_lim = np.zeros(self.shape[0] + 1)
+        self._r_lim[0] = rmin
+        self._r_lim[-1] = rmax
+        self._r_lim[1:-1] = np.sqrt(self.r[1:, 0, 0] * self.r[:-1, 0, 0])
+
+        # regular lim in theta, linear if not in cosine TO DO
+        self._t_lim = np.zeros(self.shape[1] + 1)
+        self._t_lim[-1] = 0
+        self._t_lim[0] = (np.pi / 2, np.pi)[l3d]
+        self._t_lim[1:-1] = 0.5 * (self.theta[0, 1:, 0] + self.theta[0, :-1, 0])
+
+        # regular and linear lim in phi
         self._p_lim[-1] = 2 * np.pi
         self._p_lim[0] = 0.0
-
-        self._r_lim[0] = rmin
-        for i in range(1, self.shape[0]):
-            # self._r_lim[i] = 0.5 * (self.r[i,0,0]+self.r[i-1,0,0])
-            dr = self.r[i, 0, 0] - self.r[i - 1, 0, 0]
-            self._r_lim[i] = self._r_lim[i - 1] + dr
-        self._r_lim[self.shape[0]] = rmax
-
-        # w = self._st[0, :, 0]
-        # because theta goes to pi to 0 in general for that grid but it is
-        # preferable for the limits in mcfost to have it from 1 to -1 so pi/2 to pi/2
-        # Still, theta goes from pi to 0.
-        w = np.sin(self.theta[0, :, 0] - (np.pi / 2, 0)[self._2d])  # [1, -1]
-        self._sint_lim[0] = 1.0
-        for j in range(1, jend):
-            self._sint_lim[j] = 0.5 * (w[j] + w[j - 1])
-            # dt = w[j] - w[j - 1]
-            # self._sint_lim[j] = self._sint_lim[j - 1] + dt
-        # print("0", self._sint_lim)
-        self._sint_lim[jend] = 0
-        # print("1", self._sint_lim)
-        if not self._2d:
-            self._sint_lim[jend + 1 :] = -self._sint_lim[0:jend][::-1]
-
-        cost_lim = np.sqrt(1.0 - self._sint_lim**2)
-        self._tlim = np.arcsin(self._sint_lim)  # [pi/2, -pi/2] in 3d
-        # print("2", self._sint_lim)
-
-        for k in range(1, self.shape[2]):
-            self._p_lim[k] = 0.5 * (self.phi[0, 0, k] + self.phi[0, 0, k - 1])
-            # dp = self.phi[0, 0, k] - self.phi[0, 0, k - 1]
-            # self._p_lim[k] = self._p_lim[k - 1] + dp
+        self._p_lim[1:-1] = 0.5 * (self.phi[0, 0, 1:] + self.phi[0, 0, :-1])
         return
 
     def clean_grid(self, regions_to_clean=[]):
@@ -292,6 +274,7 @@ class Grid:
         H0,
         r0=1,
         gas_to_dust=100,
+        cut_factor=10,
         wall=False,
         phi0=0,
         Rwi=1,
@@ -310,16 +293,14 @@ class Grid:
         H0  :: disc scale height in Rstar
         r0  :: reference radius for the scale height in Rstar
         gas_to_dust  :: gas/dust ratio
+        cut_factor :: for each R, the density is cut for z > cut_factor * h
+                    where h is the local height scale.
+                    In other word, when the density is below the midplane density
+                    times exp(-0.5*cut_factor**2)
 
-        wall    :: add a wall to the disc ?
-        phi0    :: origin of the wall in the azimuthal plane (max at phi0)
-        Rwi :: inner radius of the wall (where it starts)
-        Aw  :: width of the wall (in the z direction)
+        TO DO: wall
         """
 
-        # TO DO define a mask to identify a region corresponding to the  disc
-        # because at the moment it expands on the whole volume
-        # with potential overlap with other regions
         midplane = np.argmin((self.theta[0, :, 0] - np.pi / 2) ** 2)
         Rout = self.R.max()
         self.gas_to_dust = gas_to_dust
@@ -332,36 +313,14 @@ class Grid:
 
         K3_exp = 2 * (H0 * (self.R / r0) ** beta) ** 2
         K3 = (self.R / r0) ** (p - beta) * np.exp(-(self.z**2) / K3_exp)
+        # local scale height
+        # h = cut_factor * H0 * (self.R / r0) ** beta
+        # mask_z = abs(self.z) < h
+        mask_R = self.R >= Rin
 
-        rho = K * K2 * K3
-        rho[self.R <= Rin] = 0.0
-        # mask for the disc ? has a function of scale height ?
-        # for each r the disc is where z < eps * H ?
-
-        dwidth = 0
-        if (wall) and (not self._2d):
-            # midplane from the grid resolution ?
-            # zmin = dwidth + np.amin(abs(self.z), axis=1)
-            zmin = 0.0
-            dwall = abs(
-                Rwi
-                - self.R[
-                    np.argmin((self.R[:, midplane, 0] - Rwi) ** 2) + 1, midplane, 0
-                ]
-            )
-            dwall = Rwi * 0.1
-            north = (1.0 + np.cos(self.phi + phi0)) / 2.0
-            sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
-            wall_mask = (self.R <= Rwi + dwall) * (
-                self.z <= zmin[:, None, :] + Aw * north
-            ) * (self.z >= 0) | (self.z >= -zmin[:, None, :] - Aw * sud) * (self.z < 0)
-            mask = (self.R > Rwi) * wall_mask
-            Rwo = Rwi + dwall
-            if p == -2:
-                K2_wall = 1.0 / np.log(Rwo / Rwi)
-            else:
-                K2_wall = ((p + 2) * r0 ** (p + 2)) / (Rwo ** (p + 2) - Rwi ** (p + 2))
-            self.rho[wall_mask] = self.rho[self.rho > 0].min()  # K * K2_wall * K3[mask]
+        rho_midplane = K * K2 * mask_R
+        rho = K * K2 * K3 * mask_R
+        rho[rho < rho_midplane * np.exp(-0.5 * cut_factor**2)] = 0.0
 
         self.rho = 1 / (1 + 1 / self.gas_to_dust) * rho  # gas
         # Total dust density at the moment.
@@ -1420,7 +1379,7 @@ class Grid:
         print(self._r_lim[0], self._r_lim[-1])
         print("r min/max ():", self.r.min(), self.r.max())
         print("theta limits:")
-        print(np.rad2deg(self._tlim[0]), np.rad2deg(self._tlim[-1]))
+        print(np.rad2deg(self._t_lim[0]), np.rad2deg(self._t_lim[-1]))
         print("theta min/max:")
         print(
             np.rad2deg(self.theta[0, :, 0].min()), np.rad2deg(self.theta[0, :, 0].max())
@@ -1436,7 +1395,8 @@ class Grid:
         f.write(np.array(self.shape[0], dtype=np.int32).tobytes())
         f.write(np.single(self._r_lim).tobytes())
         f.write(np.array(self.shape[1], dtype=np.int32).tobytes())
-        f.write(np.single(self._sint_lim).tobytes())
+        f.write(np.single(self._t_lim).tobytes())
+        # f.write(np.single(self._sint_lim).tobytes())
         f.write(np.array(self.shape[2], dtype=np.int32).tobytes())
         f.write(np.single(self._p_lim).tobytes())
 
@@ -1529,7 +1489,8 @@ class Grid:
         f.write_record(self.shape[0])
         f.write_record(np.single(self._r_lim))
         f.write_record(self.shape[1])
-        f.write_record(np.single(self._sint_lim))
+        # f.write_record(np.single(self._sint_lim))
+        f.write_record(np.single(self._t_lim))
         f.write_record(self.shape[2])
         f.write_record(np.single(self._p_lim))
 
