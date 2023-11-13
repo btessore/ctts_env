@@ -277,8 +277,7 @@ class Grid:
         cut_factor=10,
         wall=False,
         phi0=0,
-        Rwi=1,
-        Aw=1,
+        hw=1,
     ):
         """
         Dust and gas disc.
@@ -298,7 +297,9 @@ class Grid:
                     In other word, when the density is below the midplane density
                     times exp(-0.5*cut_factor**2)
 
-        TO DO: wall
+        wall    :: add an inner dusty wall. The wall starts at Rin !
+        phi0    :: azimuthal position of the maximum height of the wall
+        hw  :: height of the wall in Rstar
         """
 
         midplane = np.argmin((self.theta[0, :, 0] - np.pi / 2) ** 2)
@@ -306,7 +307,7 @@ class Grid:
         self.gas_to_dust = gas_to_dust
 
         cste = (2 * np.pi) ** (3 / 2)
-        sigma_r = Msun * Md / cste / H0 / r0**2 / star.R_m**3
+        sigma0 = Msun * Md / cste / H0 / r0**2 / star.R_m**3
 
         if p == -2:
             norm = 1.0 / np.log(Rout / Rin)
@@ -316,15 +317,36 @@ class Grid:
         arg_exp = 2 * (H0 * (self.R / r0) ** beta) ** 2
         fact_exp = np.exp(-self.z**2 / arg_exp)
 
-        rho = sigma_r * norm * (self.R / r0) ** (p - beta) * fact_exp
+        rho = sigma0 * norm * (self.R / r0) ** (p - beta) * fact_exp
 
         h = cut_factor * H0 * (self.R / r0) ** beta
         mask_z = abs(self.z) < h
         mask_R = self.R >= Rin
 
-        rho_midplane = sigma_r * norm * mask_R * (self.R / r0) ** (p - beta)
+        rho_midplane = sigma0 * norm * mask_R * (self.R / r0) ** (p - beta)
         rho = rho * mask_R * mask_z
         # rho[rho < rho_midplane * np.exp(-0.5 * cut_factor**2)] = 0.0
+
+        if wall:
+            # wall width
+            zmin = H0 * (Rin / r0) ** beta
+            dwall = abs(
+                Rin
+                - self.R[
+                    np.argmin((self.R[:, midplane, 0] - Rin) ** 2) + 1, midplane, 0
+                ]
+            )
+            north = (1.0 + np.cos(self.phi + phi0)) / 2.0
+            sud = (1.0 + np.cos(self.phi + np.pi + phi0)) / 2.0
+            wall_mask = (self.R <= Rin + dwall) * (self.z <= zmin + hw * north) * (
+                self.z >= 0
+            ) | (self.z >= -zmin - hw * sud) * (self.z < 0)
+            self.rho[wall_mask] = (
+                sigma0
+                * norm
+                * (self.R[wall_mask] / r0) ** (p - beta)
+                * fact_exp[wall_mask]
+            )
 
         self.rho = 1 / (1 + 1 / self.gas_to_dust) * rho  # gas
         # Total dust density at the moment.
