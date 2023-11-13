@@ -287,7 +287,7 @@ class Grid:
         are zero (not atomic transfer).
 
         Rin :: inner edge of the disc (outer edge is fixed by the grid)
-        Md  :: disc's mass in Mstar (not Msun)
+        Md  :: disc's mass in Msun
         p   :: exponent
         beta    :: exponent
         H0  :: disc scale height in Rstar
@@ -305,22 +305,26 @@ class Grid:
         Rout = self.R.max()
         self.gas_to_dust = gas_to_dust
 
-        K = star.M_kg * Md / (2 * np.pi) ** 1.5 / H0 / r0**2 / star.R_m**3
-        if p == -2:
-            K2 = 1.0 / np.log(Rout / Rin)
-        else:
-            K2 = ((p + 2) * r0 ** (p + 2)) / (Rout ** (p + 2) - Rin ** (p + 2))
+        cste = (2 * np.pi) ** (3 / 2)
+        sigma_r = Msun * Md / cste / H0 / r0**2 / star.R_m**3
 
-        K3_exp = 2 * (H0 * (self.R / r0) ** beta) ** 2
-        K3 = (self.R / r0) ** (p - beta) * np.exp(-(self.z**2) / K3_exp)
-        # local scale height
-        # h = cut_factor * H0 * (self.R / r0) ** beta
-        # mask_z = abs(self.z) < h
+        if p == -2:
+            norm = 1.0 / np.log(Rout / Rin)
+        else:
+            norm = ((p + 2) * r0 ** (p + 2)) / (Rout ** (p + 2) - Rin ** (p + 2))
+
+        arg_exp = 2 * (H0 * (self.R / r0) ** beta) ** 2
+        fact_exp = np.exp(-self.z**2 / arg_exp)
+
+        rho = sigma_r * norm * (self.R / r0) ** (p - beta) * fact_exp
+
+        h = cut_factor * H0 * (self.R / r0) ** beta
+        mask_z = abs(self.z) < h
         mask_R = self.R >= Rin
 
-        rho_midplane = K * K2 * mask_R
-        rho = K * K2 * K3 * mask_R
-        rho[rho < rho_midplane * np.exp(-0.5 * cut_factor**2)] = 0.0
+        rho_midplane = sigma_r * norm * mask_R * (self.R / r0) ** (p - beta)
+        rho = rho * mask_R * mask_z
+        # rho[rho < rho_midplane * np.exp(-0.5 * cut_factor**2)] = 0.0
 
         self.rho = 1 / (1 + 1 / self.gas_to_dust) * rho  # gas
         # Total dust density at the moment.
